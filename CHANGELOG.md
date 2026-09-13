@@ -1,0 +1,140 @@
+# Changelog
+
+All notable changes to TALOS. The format follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
+semantic versioning: **MAJOR** for breaking changes, **MINOR** for new
+features, **PATCH** for fixes.
+
+Every entry below is also the text of the matching GitHub Release: the
+release workflow lifts the section for the tag out of this file.
+
+---
+
+## [Unreleased]
+
+Nothing yet.
+
+---
+
+## [2.0.0] — TALOS
+
+The release that gives the project its name. TALOS — *The Living Chess
+Studio* — is a chess school, a Battle Chess stage, an anarchic rulebook and a
+land before Chess, in one local application.
+
+### Added
+
+**Anarchchess — the house rules, playable**
+- A new variant family with fifteen switches, collected from r/AnarchyChess,
+  anarchychess.org and the Anarchchess bots. Every rule is a checkbox under
+  `Anarchy ▸ Choose the rules…`.
+- Forced en passant, **knooks** (a knight fuses with a friendly rook and
+  gains both move sets), the **c4 detonation**, **double check wins**, the
+  king may never go to **c2**, **Il Vaticano**, the **Siberian Swipe**,
+  **vertical castling**, the **knight boost**, **dismounting**, and
+  **radioactive queen decay**.
+- **Full anarchy** adds the omnipotent pawn, **promotion roulette**, the
+  hyper-accelerated **Bongcloud** win and random events every turn.
+- Two presets ship ready: *Anarchchess* (curated) and *Full anarchy*.
+- The built-in engine plays both without a single change: it only ever asks
+  python-chess what is legal.
+
+**Anarchess — the land before Chess**
+- A reconstruction of Anarchess by Dimitris Grammenos (FORTH), built from the
+  components and scoring described by its author: 32 light + 32 dark tiles,
+  2–4 players (8/6/5 pawns each), lay a tile then take one optional pawn
+  action, score every area of two or more tiles.
+- Playable against three bot levels, with a pan/zoom board and a live
+  territory readout.
+- The eight questions the published sources leave open are documented in the
+  app as numbered reconstruction decisions — and most of them are switches.
+
+**The learning coach**
+- SM-2 spaced repetition over every drill: right answers stretch the
+  interval, quick answers stretch it further, hints shrink it, and cards that
+  keep slipping are flagged and pushed to the front of the queue.
+- An Elo-style rating for eight themes — tactics, mates, endgames, strategy,
+  openings, calculation, visualisation, memory — updated against the
+  difficulty of what you just attempted.
+- `Train ▸ Learning coach…` (`Ctrl+J`): mastery bars, a seven-day forecast,
+  recent accuracy, one sentence of advice, and two buttons that act on it —
+  *Review what is due* builds a session from exactly the cards whose day has
+  come, *Train my weakest theme* opens the mode you need.
+
+**Battle Chess: the victims fight back**
+- Six death choreographies, chosen by who dies and who kills: kings are
+  **beheaded**, pawns are **knocked over**, the rook **flattens**, the pawn
+  **impales**, the bishop **disintegrates**, the queen blows the target apart.
+- Blood at two levels: `Battle ▸ Gore ▸ Classic` is the 1988 tone (stylised
+  spray that stains the board, pooling decals that spread and dry, severed
+  limbs that bounce and settle); `Arcade` replaces every drop with dust.
+- New physics: splatting droplets, irregular growing stains, body-part
+  debris, a fatter point pass for droplets and a wider shake on impact.
+
+**Interface**
+- A real design system (`lc/ui/theme.py`): three palettes — midnight, slate,
+  parchment — switchable from `View ▸ Interface theme`, including a
+  recoloured toolbar.
+- Thirty inline-SVG icons (no external files, so the app works offline and in
+  sandboxes).
+- The launcher sets the application name, organisation, version and theme.
+
+**Editions — one codebase, four ways to play**
+- **Browser edition** (`web/`): the real Python engine, the Anarchess rules
+  and the Anarchchess rules running under Pyodide in a Web Worker. Play,
+  puzzles, Anarchess and the rule switches, with no install at all.
+- **Android edition**: the same site, installable — *Add to Home Screen*
+  gives a full-screen app that works offline. No APK, no store, no SDK.
+- **Windows and Linux packaging**: a PyInstaller one-folder build, an Inno
+  Setup installer with a `.pgn` association, and a user-space Linux installer
+  with a `.desktop` file and AppStream metadata (`packaging/`).
+- **macOS**: the same spec builds `TALOS.app` (unsigned).
+- A service worker caches the whole studio, so the second visit — on a phone
+  or a laptop — needs no network.
+- The presentation (`presentation/index.html`) doubles as the GitHub Pages
+  landing page, with the playable app at `/web/`.
+- Releases: every `v*` tag builds all four artefacts, lifts this section out
+  of the changelog, attaches `SHA256SUMS.txt` and opens a **draft** release.
+
+### Changed
+
+- The application is **TALOS** everywhere: window title, PGN `Event`/`Site`
+  tags, `.desktop` file and installer.
+- `run.py` applies the saved interface theme before the first window appears.
+- Training sessions now report failures to the learning model, so a wrong
+  answer brings the card back tomorrow instead of being forgotten.
+
+### Fixed
+
+- Anarchess deadlocked when a player's pawns were all boxed in: the pawn
+  action is optional, so *pass* must always be legal. It now is.
+- python-chess 1.11's `remove_piece_at`/`set_piece_at` call `clear_stack()`,
+  which silently erased the whole game history every time an anarchic effect
+  fired. The variant now edits bitboards directly.
+- A king left exposed by an earthquake or a c4 detonation could be captured.
+  Eaten kings are struck from the move list, so the exposed side is simply in
+  check and loses if it cannot escape.
+
+### Engine
+
+- **Razoring is now off.** A leave-one-out ablation over every pruning
+  heuristic showed it cost 22 puzzles on the Lucas tactics set: a static
+  evaluation far below alpha is exactly what a sacrifice looks like.
+- Puzzle score: **58.7% → 73.3%** on 150 real Lucas puzzles at 400 ms/move
+  (`tools/bench.py`), with the self test at 100/100.
+
+---
+
+## [1.0.0]
+
+The first release, then called Lucas Chess NX.
+
+- Standard chess plus ten FICS variants, 12 strength levels and 7
+  personalities, any UCI engine, clocks.
+- 14 training modes on real Lucas Chess data (112,198 puzzles, 10,000 games,
+  6,633 openings).
+- Continuous analysis, MultiPV, evaluation graph, whole-game analysis with
+  centipawn loss and PGN NAGs.
+- Battle Chess 3D mode: procedural pieces, six fight styles, rigid-body
+  shards, three cameras.
+- Master game database, opening explorer, PGN import/export.

@@ -1,0 +1,169 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag to build (e.g. v2.0.0)
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    name: Windows bundle
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Build with PyInstaller
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt pyinstaller
+          pyinstaller packaging/talos.spec --noconfirm --distpath dist
+
+      - name: Zip the bundle
+        shell: bash
+        run: 7z a -tzip talos-windows-x86_64.zip ./dist/talos/*
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: talos-windows
+          path: talos-windows-x86_64.zip
+
+  linux:
+    name: Linux bundle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Qt runtime libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libxkbcommon0 libxkbcommon-x11-0 libdbus-1-3 libxcb-cursor0 \
+            libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 \
+            libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 libxcb-xkb1 \
+            libgl1 libegl1 libglib2.0-0
+
+      - name: Build with PyInstaller
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt pyinstaller
+          pyinstaller packaging/talos.spec --noconfirm --distpath dist
+
+      - name: Tar the bundle
+        run: |
+          cp packaging/linux-install.sh packaging/talos.desktop dist/
+          tar -czf talos-linux-x86_64.tar.gz -C dist talos talos.desktop \
+            linux-install.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: talos-linux
+          path: talos-linux-x86_64.tar.gz
+
+  macos:
+    name: macOS app
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Build with PyInstaller
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt pyinstaller
+          pyinstaller packaging/talos.spec --noconfirm --distpath dist
+
+      - name: Zip the app
+        run: ditto -c -k --keepParent "dist/TALOS.app" talos-macos-universal.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: talos-macos
+          path: talos-macos-universal.zip
+
+  web:
+    name: Browser edition
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build the Pyodide payload
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install chess
+          python tools/build_web.py
+
+      - name: Zip it for self-hosting
+        run: cd web && zip -qr "../talos-browser-${GITHUB_REF_NAME#v}.zip" . && cd ..
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: talos-browser
+          path: talos-browser-*.zip
+
+  release:
+    name: Publish the release
+    needs: [windows, linux, macos, web]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Which version is this
+        id: ver
+        run: |
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            echo "tag=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Notes for this version
+        run: |
+          python tools/release_notes.py "${{ steps.ver.outputs.tag }}" > notes.md
+          echo "--- notes.md ---"
+          head -20 notes.md
+
+      - name: Checksums
+        run: |
+          cd artifacts
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Create the release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: TALOS ${{ github.ref_name }}
+          body_path: notes.md
+          draft: true
+          files: |
+            artifacts/*
+            artifacts/SHA256SUMS.txt

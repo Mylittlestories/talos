@@ -1,0 +1,101 @@
+# Contributing to TALOS
+
+Thanks for wanting to help. TALOS is a desktop-first Python application, so
+the shortest path to a useful change is usually: run it, open the module that
+misbehaves, fix it, add a check to the self test.
+
+## Setting up
+
+```bash
+python3 -m pip install -r requirements.txt
+python run.py                 # the app
+python tools/selftest.py      # 100 headless checks, no display needed
+python tools/bench.py --count 150 --ms 400   # engine strength on real puzzles
+
+python tools/build_web.py     # build the browser + Android edition
+npm install --no-save --no-package-lock pyodide@0.27.7
+node tools/web_smoke.mjs      # boots the web payload and plays it (82 checks)
+node tools/web_dom_check.mjs  # boots the real page in a DOM and plays it (33 checks)
+python tools/make_deck.py     # rebuild presentation/index.html
+python tools/make_icon.py     # rebuild the icon set in assets/
+```
+
+On Linux you may need the Qt runtime libraries — `bash tools/setup_env.sh`
+installs them on Debian/Ubuntu.
+
+## Ground rules
+
+* **Everything stays local.** No accounts, no telemetry, no network calls
+  except the two the user asks for: the Stockfish installer and the opening
+  database import.
+* **Nothing is downloaded to be drawn.** Pieces, icons and sounds are
+  generated at run time (Qt paths, inline SVG, synthesised audio). If a change
+  needs an asset, generate it.
+* **Engine changes are measured.** Before and after any search or evaluation
+  change, run `tools/bench.py` and put the numbers in the pull request. A
+  heuristic that "should" be faster is not evidence; 150 puzzles are.
+* **Every change adds a check.** `tools/selftest.py` runs headless in CI on
+  Linux, macOS and Windows, so a check is the only way a behaviour is
+  protected. The same goes for the browser edition: `tools/web_smoke.mjs`
+  covers the Python payload and `tools/web_dom_check.mjs` boots the actual page
+  in jsdom and plays it. Both need
+  `npm install --no-save --no-package-lock pyodide@0.27.7 jsdom`.
+* **The browser edition is not a port.** `web/python/` is *generated* from
+  `lc/` by `tools/build_web.py`. Edit the module in `lc/`, never the copy.
+  The only file written specifically for the web is
+  `web/python_src/bridge.py`, a thin JSON-in/JSON-out facade.
+
+## Layout
+
+| Path | What lives there |
+|---|---|
+| `lc/core/` | engine, UCI driver, game model, players, clocks |
+| `lc/variants/` | Anarchchess |
+| `lc/anarchess/` | Anarchess rules, bot and board widget |
+| `lc/ui/` | Qt widgets, theme, dialogs, sounds |
+| `lc/battle/` | 3D Battle Chess: meshes, physics, choreography, gore |
+| `lc/training/` | the 14 sessions, their panel, and the learning model |
+| `lc/data/` | Lucas importer, Stockfish installer, opening explorer |
+| `web/` | the browser/PWA edition (runs the Python core under Pyodide) |
+| `presentation/` | the generated deck, also the Pages landing page |
+| `packaging/` | PyInstaller spec, desktop file, installers |
+| `tools/` | self test, benchmark, icon generator, web/site builders |
+
+## Style
+
+* Python 3.9+, four spaces, type hints on public functions, docstrings where
+  they earn their keep.
+* Names in the domain's own words: `Fight`, `Card`, `AnarchBoard`, `knooks`.
+* Comments explain *why*, especially where a workaround is involved (there
+  are two: python-chess clears the move stack on `remove_piece_at`, and
+  razoring is off because the ablation says so).
+
+## Before the first push
+
+Three files carry a `USERNAME` placeholder that must be replaced with the real
+GitHub account, or the links will 404:
+
+* `packaging/talos.metainfo.xml` — homepage and screenshot URLs
+* `packaging/windows-installer.iss` — `AppPublisherURL`, `AppSupportURL`
+* `tools/make_deck.py` — `REPO`, used for every link in the presentation
+
+Run `python tools/make_deck.py` again after editing `REPO`.
+
+## Cutting a release
+
+1. Move `[Unreleased]` into a version section in `CHANGELOG.md`.
+2. Bump `APP_VERSION` in `lc/__init__.py`.
+3. `git tag -a v2.0.0 -m "TALOS 2.0.0" && git push --tags`.
+4. CI builds the Windows, Linux, macOS and browser bundles, deploys the Pages
+   site and opens a **draft** release with the changelog section as its body
+   and `SHA256SUMS.txt` attached.
+5. Read the draft, then publish it.
+
+The service worker's cache name (`const VERSION` in `web/sw.js`) should be
+bumped with the release, so returning visitors pick up the new build instead
+of the cached one.
+
+## Licence
+
+GPLv2 or later, like Lucas Chess itself. By contributing you agree to your
+work being licensed that way.

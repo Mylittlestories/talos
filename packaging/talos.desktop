@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=TALOS
+GenericName=Chess
+Comment=The Living Chess Studio - play, train and analyse chess offline
+Exec=talos
+TryExec=talos
+Icon=talos
+Terminal=false
+StartupWMClass=talos
+Categories=Game;BoardGame;Education;
+Keywords=chess;lucas;battle;anarchess;anarchchess;training;puzzles;engine;
+MimeType=application/vnd.chess-pgn;application/x-chess-pgn;text/x-pgn;
+StartupNotify=true

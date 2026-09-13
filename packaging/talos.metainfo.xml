@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>org.taloschess.studio</id>
+  <name>TALOS</name>
+  <summary>The Living Chess Studio</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-2.0-or-later</project_license>
+  <description>
+    <p>
+      TALOS is a completely local chess playing, training and analysis suite
+      inspired by Lucas Chess. It plays standard chess plus ten FICS variants
+      and two TALOS originals, trains you on 112,198 real Lucas Chess puzzles,
+      keeps a spaced-repetition coach, and can swap the flat board for a 3D
+      Battle Chess stage where the victims lose their heads.
+    </p>
+    <p>
+      It also ships Anarchess, a reconstruction of the tile-laying game by
+      Dimitris Grammenos, and Anarchchess, the community's house rules as a
+      real playable variant.
+    </p>
+  </description>
+  <launchable type="desktop-id">talos.desktop</launchable>
+  <screenshots>
+    <screenshot type="default">
+      <caption>The board, with analysis and the move list</caption>
+      <image>https://raw.githubusercontent.com/USERNAME/TALOS/main/docs/img/chess.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Anarchess - the land before Chess</caption>
+      <image>https://raw.githubusercontent.com/USERNAME/TALOS/main/docs/img/anarchess.png</image>
+    </screenshot>
+  </screenshots>
+  <url type="homepage">https://github.com/USERNAME/TALOS</url>
+  <content_rating type="oars-1.1">
+    <content_attribute id="violence-cartoon">mild</content_attribute>
+    <content_attribute id="violence-fantasy">mild</content_attribute>
+  </content_rating>
+</component>

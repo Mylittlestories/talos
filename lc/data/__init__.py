@@ -1,0 +1,1 @@
+"""Lucas Chess NX package."""

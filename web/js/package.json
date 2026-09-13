@@ -1,0 +1,4 @@
+{
+  "//": "Marks web/js as ES modules so tools/web_dom_check.mjs can import the real files under Node. Never fetched by the browser.",
+  "type": "module"
+}

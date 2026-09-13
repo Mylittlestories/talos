@@ -1,0 +1,980 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TALOS — The Living Chess Studio</title>
+<meta name="description" content="TALOS: a Lucas Chess inspired chess studio with its own engine, 112,000 puzzles, Anarchess and Anarchchess. Windows, Linux, Android and browser editions.">
+<style>
+:root{
+  --window:#0e1015; --panel:#151925; --panel2:#1b2030; --line:#272d3d;
+  --text:#e9e6df; --dim:#9aa2b4; --accent:#f0b429; --accent2:#4cc2ff;
+  --good:#7ee081; --bad:#e05a4f; --light:#eee3cc; --dark:#8d6a48;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0; background:var(--window); color:var(--text);
+  font:16px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  display:flex; flex-direction:column; overflow:hidden;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3{margin:0 0 .5em; line-height:1.15}
+h1{font-size:clamp(30px,4.4vw,58px); letter-spacing:-.02em}
+h2{font-size:clamp(22px,2.6vw,34px); letter-spacing:-.01em}
+h3{font-size:15px; text-transform:uppercase; letter-spacing:.14em; color:var(--accent)}
+p{margin:0 0 .8em}
+a{color:var(--accent2)}
+b{color:#fff}
+small{color:var(--dim)}
+ul{margin:0; padding-left:1.1em}
+li{margin:.28em 0}
+
+/* ------------------------------------------------------------------ bars */
+.bar{
+  flex:none; display:flex; align-items:center; gap:14px;
+  padding:10px 18px; border-top:1px solid var(--line); background:#0b0d12;
+}
+.bar.top{border-top:0; border-bottom:1px solid var(--line)}
+.brand{display:flex; align-items:center; gap:10px; font-weight:700; letter-spacing:.06em}
+.brand svg{width:26px; height:26px; border-radius:6px; flex:none}
+.brand span{color:var(--dim); font-weight:400; letter-spacing:.02em; font-size:13px}
+.spacer{flex:1}
+.counter{color:var(--dim); font-variant-numeric:tabular-nums; font-size:13px}
+button{
+  font:inherit; color:var(--text); background:var(--panel2);
+  border:1px solid var(--line); border-radius:8px; padding:7px 13px; cursor:pointer;
+}
+button:hover{border-color:var(--accent); color:#fff}
+button:disabled{opacity:.35; cursor:default; border-color:var(--line)}
+.dots{display:flex; gap:6px}
+.dots i{
+  width:9px; height:9px; border-radius:50%; background:var(--line);
+  cursor:pointer; display:block;
+}
+.dots i.on{background:var(--accent)}
+.hint{color:var(--dim); font-size:12px}
+.progress{height:3px; background:var(--line); flex:none}
+.progress i{display:block; height:100%; width:0; background:var(--accent); transition:width .25s}
+
+/* ---------------------------------------------------------------- slides */
+main{flex:1; display:flex; align-items:center; justify-content:center; padding:22px; min-height:0}
+.slide{
+  display:none; width:min(1180px,100%); aspect-ratio:16/9; max-height:100%;
+  background:linear-gradient(160deg,var(--panel) 0%,#10131b 100%);
+  border:1px solid var(--line); border-radius:18px; padding:clamp(20px,3.2vw,52px);
+  overflow:hidden; position:relative;
+}
+.slide.active{display:grid; grid-template-rows:auto 1fr; animation:in .28s ease}
+@keyframes in{from{opacity:0; transform:translateY(10px)}to{opacity:1; transform:none}}
+.slide:after{
+  content:""; position:absolute; inset:auto -30% -55% auto; width:70%; height:90%;
+  background:radial-gradient(circle at 70% 30%,rgba(240,180,41,.10),transparent 62%);
+  pointer-events:none;
+}
+.slide > header{position:relative; z-index:1}
+.slide > .body{position:relative; z-index:1; min-height:0; display:flex; flex-direction:column; justify-content:center}
+.kicker{color:var(--dim); font-size:13px; letter-spacing:.16em; text-transform:uppercase; margin-bottom:.5em}
+.lead{font-size:clamp(15px,1.35vw,19px); color:#d7d3ca; max-width:62ch}
+
+.cols{display:grid; grid-template-columns:1fr 1fr; gap:clamp(16px,2.4vw,40px); align-items:start}
+.cols3{display:grid; grid-template-columns:repeat(3,1fr); gap:clamp(14px,2vw,30px)}
+.card{background:var(--panel2); border:1px solid var(--line); border-radius:12px; padding:14px 16px}
+.card h4{margin:0 0 .35em; font-size:15px; color:#fff}
+.card p{margin:0; font-size:13.5px; color:var(--dim)}
+
+.big{display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin:6px 0 4px}
+.big div{background:var(--panel2); border:1px solid var(--line); border-radius:12px; padding:14px}
+.big b{display:block; font-size:clamp(20px,2.3vw,30px); color:var(--accent); line-height:1.1}
+.big span{font-size:12.5px; color:var(--dim)}
+
+table{width:100%; border-collapse:collapse; font-size:14px}
+th,td{text-align:left; padding:5px 8px; border-bottom:1px solid var(--line)}
+th{color:var(--accent); font-size:11.5px; text-transform:uppercase; letter-spacing:.1em}
+td:not(:first-child){font-variant-numeric:tabular-nums; color:var(--dim)}
+td:first-child{color:#fff}
+
+.rules{list-style:none; padding:0; columns:3; column-gap:22px; font-size:13px}
+.rules li{break-inside:avoid; margin:0 0 9px}
+.rules b{display:block; font-size:13px}
+.rules span{color:var(--dim); font-size:12px}
+
+.steps{display:grid; grid-template-columns:repeat(3,1fr); gap:16px; counter-reset:s}
+.step{position:relative; padding-left:44px}
+.step:before{
+  counter-increment:s; content:counter(s);
+  position:absolute; left:0; top:0; width:30px; height:30px; border-radius:50%;
+  background:var(--accent); color:#1a1405; font-weight:800;
+  display:flex; align-items:center; justify-content:center; font-size:14px;
+}
+.step h4{margin:.1em 0 .3em; font-size:15px}
+.step p{margin:0; font-size:13px; color:var(--dim)}
+
+.iconrow{display:flex; gap:clamp(16px,3vw,46px); align-items:center}
+.iconrow .app{width:clamp(120px,17vw,230px); height:auto; border-radius:22px; flex:none;
+  box-shadow:0 18px 50px rgba(0,0,0,.5)}
+.ingredients li{margin:.55em 0; font-size:14px}
+
+.center{text-align:center}
+.center .body{align-items:center}
+.cta{margin-top:22px; display:flex; gap:12px; justify-content:center; flex-wrap:wrap}
+.cta a{
+  text-decoration:none; font-weight:600; padding:12px 22px; border-radius:10px;
+  border:1px solid var(--accent); color:var(--accent);
+}
+.cta a.primary{background:var(--accent); color:#1a1405}
+.cta a.ghost{border-color:var(--line); color:var(--text)}
+
+.grid9{display:grid; grid-template-columns:repeat(2,1fr); gap:10px 26px; font-size:14px}
+
+/* --------------------------------------------------------------- overview */
+body.over main{overflow:auto; align-items:flex-start}
+body.over .slide{display:grid; width:100%; max-width:1100px; aspect-ratio:16/9;
+  max-height:none; margin:0 auto 18px; cursor:pointer; animation:none}
+body.over .slide:after{display:none}
+body.over .slide.active{outline:2px solid var(--accent)}
+
+@media (max-width:900px){
+  .cols,.cols3,.steps{grid-template-columns:1fr}
+  .big{grid-template-columns:repeat(2,1fr)}
+  .rules{columns:2}
+  .slide{aspect-ratio:auto; min-height:100%; overflow:auto}
+}
+@media print{
+  @page{size:landscape; margin:8mm}
+  body{overflow:visible; height:auto; display:block; background:#fff}
+  .bar,.progress,.hint{display:none !important}
+  main{display:block; padding:0}
+  .slide{display:grid !important; page-break-after:always; border-color:#bbb;
+    background:#fff; color:#111; max-height:none}
+  .slide:after{display:none}
+  h1,h2,h3,b,td:first-child{color:#111}
+  .lead,.card p,.rules span,td,.dim{color:#333}
+  .card,.big div{background:#f6f6f6; border-color:#ccc}
+  .step:before{background:#111; color:#fff}
+}
+</style>
+</head>
+<body>
+
+<header class="bar top">
+  <div class="brand"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 13 13"
+     width="512" height="512" role="img" aria-label="TALOS">
+  <title>TALOS - The Living Chess Studio</title>
+  <defs>
+    <linearGradient id="plate" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0e1015"/>
+      <stop offset="1" stop-color="#1a1e29"/>
+    </linearGradient>
+  </defs>
+  <rect width="13" height="13" rx="3.05" fill="url(#plate)"/>
+  <rect x="0.58" y="0.58" width="11.84" height="11.84" rx="2.6"
+        fill="none" stroke="#f0b429" stroke-opacity="0.82" stroke-width="0.18"/>
+  <g>
+    <rect x="3.10" y="1.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="6.10" y="1.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="3.10" y="2.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="4.10" y="2.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="5.10" y="2.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="6.10" y="2.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="3.10" y="3.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="4.10" y="3.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="5.10" y="3.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="6.10" y="3.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="7.10" y="3.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="2.10" y="4.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="3.10" y="4.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="4.10" y="4.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="5.10" y="4.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="6.10" y="4.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="7.10" y="4.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="8.10" y="4.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="2.10" y="5.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="3.10" y="5.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="4.10" y="5.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="5.10" y="5.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="6.10" y="5.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="7.10" y="5.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="8.10" y="5.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="2.10" y="6.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="3.10" y="6.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="4.10" y="6.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="5.10" y="6.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="6.10" y="6.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="7.10" y="6.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="8.10" y="6.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="9.10" y="6.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="2.10" y="7.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="3.10" y="7.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="4.10" y="7.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="5.10" y="7.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="6.10" y="7.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="7.10" y="7.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="8.10" y="7.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="9.10" y="7.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="2.10" y="8.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="3.10" y="8.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="4.10" y="8.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="5.10" y="8.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="6.10" y="8.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="7.10" y="8.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="8.10" y="8.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="9.10" y="8.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="10.10" y="8.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="3.10" y="9.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="4.10" y="9.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="5.10" y="9.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="6.10" y="9.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="7.10" y="9.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="8.10" y="9.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="9.10" y="9.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="10.10" y="9.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="4.10" y="10.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="5.10" y="10.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="6.10" y="10.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="7.10" y="10.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="8.10" y="10.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="9.10" y="10.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="10.10" y="10.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="3.10" y="11.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="4.10" y="11.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="5.10" y="11.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="6.10" y="11.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="7.10" y="11.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="8.10" y="11.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="9.10" y="11.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="3.10" y="12.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="4.10" y="12.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="5.10" y="12.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="6.10" y="12.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="7.10" y="12.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="8.10" y="12.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="9.10" y="12.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="10.10" y="12.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="11.10" y="12.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+  </g>
+</svg>
+<span>TALOS &nbsp;·&nbsp; The Living Chess Studio</span></div>
+  <div class="spacer"></div>
+  <span class="counter" id="counter">1 / 1</span>
+</header>
+
+<div class="progress"><i id="bar"></i></div>
+
+<main id="deck">
+
+<!-- 1 ------------------------------------------------------------------ -->
+<section class="slide active" data-title="TALOS">
+  <header><p class="kicker">September 2026 &nbsp;·&nbsp; version 2.0.0</p></header>
+  <div class="body center">
+    <div class="iconrow" style="justify-content:center">
+      <svg class="app" viewBox="0 0 13 13" role="img" aria-label="TALOS icon">
+  <title>TALOS - The Living Chess Studio</title>
+  <defs>
+    <linearGradient id="plate" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0e1015"/>
+      <stop offset="1" stop-color="#1a1e29"/>
+    </linearGradient>
+  </defs>
+  <rect width="13" height="13" rx="3.05" fill="url(#plate)"/>
+  <rect x="0.58" y="0.58" width="11.84" height="11.84" rx="2.6"
+        fill="none" stroke="#f0b429" stroke-opacity="0.82" stroke-width="0.18"/>
+  <g>
+    <rect x="3.10" y="1.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="6.10" y="1.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="3.10" y="2.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="4.10" y="2.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="5.10" y="2.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="6.10" y="2.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="3.10" y="3.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="4.10" y="3.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="5.10" y="3.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="6.10" y="3.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="7.10" y="3.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="2.10" y="4.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="3.10" y="4.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="4.10" y="4.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="5.10" y="4.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="6.10" y="4.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="7.10" y="4.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="8.10" y="4.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="2.10" y="5.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="3.10" y="5.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="4.10" y="5.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="5.10" y="5.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="6.10" y="5.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="7.10" y="5.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="8.10" y="5.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="2.10" y="6.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="3.10" y="6.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="4.10" y="6.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="5.10" y="6.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="6.10" y="6.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="7.10" y="6.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="8.10" y="6.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="9.10" y="6.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="2.10" y="7.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="3.10" y="7.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="4.10" y="7.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="5.10" y="7.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="6.10" y="7.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="7.10" y="7.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="8.10" y="7.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="9.10" y="7.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="2.10" y="8.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="3.10" y="8.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="4.10" y="8.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="5.10" y="8.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="6.10" y="8.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="7.10" y="8.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="8.10" y="8.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="9.10" y="8.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="10.10" y="8.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="3.10" y="9.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="4.10" y="9.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="5.10" y="9.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="6.10" y="9.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="7.10" y="9.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="8.10" y="9.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="9.10" y="9.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="10.10" y="9.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="4.10" y="10.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="5.10" y="10.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="6.10" y="10.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="7.10" y="10.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="8.10" y="10.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="9.10" y="10.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="10.10" y="10.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="3.10" y="11.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="4.10" y="11.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="5.10" y="11.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="6.10" y="11.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="7.10" y="11.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="8.10" y="11.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="9.10" y="11.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="3.10" y="12.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="4.10" y="12.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="5.10" y="12.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="6.10" y="12.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="7.10" y="12.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="8.10" y="12.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="9.10" y="12.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="10.10" y="12.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="11.10" y="12.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+  </g>
+</svg>
+      <div style="text-align:left">
+        <h1>TALOS</h1>
+        <p class="lead" style="font-size:clamp(17px,1.8vw,24px); color:var(--accent);
+           letter-spacing:.02em; margin-bottom:.6em">The Living Chess Studio</p>
+        <p class="lead">A chess studio in the spirit of Lucas Chess, rebuilt from
+          the board up: its own engine, an adaptive coach, 112,000 real puzzles,
+          the Anarchchess house rules and the Anarchess board game — on Windows,
+          Linux, Android and in a browser tab.</p>
+        <div class="cta">
+          <a class="primary" href="web/index.html">Play in your browser</a>
+          <a class="ghost" href="https://github.com/USERNAME/talos">Source &amp; downloads</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 2 ------------------------------------------------------------------ -->
+<section class="slide" data-title="What it is">
+  <header><p class="kicker">The idea</p><h2>A studio, not just a board</h2></header>
+  <div class="body">
+    <p class="lead">Lucas Chess is the best chess <em>teacher</em> ever written
+      for the desktop. TALOS keeps that feel — play, train, replay, repeat —
+      and rebuilds the parts that age badly: the interface, the engine and the
+      reach.</p>
+    <div class="cols">
+      <div>
+        <div class="card" style="margin-bottom:12px">
+          <h4>Familiar where it matters</h4>
+          <p>Same rhythm as Lucas Chess: pick a level, play, get told where you
+            went wrong, drill the position again.</p>
+        </div>
+        <div class="card" style="margin-bottom:12px">
+          <h4>Modern where it counts</h4>
+          <p>Three palettes, a responsive layout, vector interface, no
+            thousand-button toolbar. Dark, quiet, out of the way.</p>
+        </div>
+        <div class="card">
+          <h4>Yours, entirely</h4>
+          <p>No accounts, no telemetry, no server. Everything — engine, database,
+            gore, puzzles — runs on your machine.</p>
+        </div>
+      </div>
+      <div>
+        <div class="card" style="margin-bottom:12px">
+          <h4>Four editions, one core</h4>
+          <p>Windows, Linux, Android (installable web app) and the browser all
+            execute the same Python modules. No feature is web-only.</p>
+        </div>
+        <div class="card" style="margin-bottom:12px">
+          <h4>Variants that are actually different</h4>
+          <p>Anarchchess and full anarchy, plus Anarchess, a tile-laying
+            strategy game from the same island as the studio.</p>
+        </div>
+        <div class="card">
+          <h4>Battle Chess when you want it</h4>
+          <p>A switch, not an identity. Pieces walk, duel and shatter in
+            procedural 3D — turn it on for the spectacle, off for study.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 3 ------------------------------------------------------------------ -->
+<section class="slide" data-title="The engine">
+  <header><p class="kicker">Playing strength</p><h2>An engine that has to be respected</h2></header>
+  <div class="body">
+    <div class="cols">
+      <div>
+        <h3>Search</h3>
+        <ul class="grid9">
+          <li>iterative deepening, aspiration windows</li>
+          <li>principal variation search</li>
+          <li>transposition table with generations</li>
+          <li>static exchange evaluation</li>
+          <li>null move, reverse futility, razoring*</li>
+          <li>late move reductions + verification</li>
+          <li>check, singular &amp; recapture extensions</li>
+          <li>killers, countermoves, continuation history</li>
+          <li>quiescence with delta pruning</li>
+          <li>triangular PV (exact, not reconstructed)</li>
+        </ul>
+        <p><small>* razoring is measured and off: it prunes away sacrifices —
+          58.7&nbsp;% → 73.3&nbsp;% on the tactical suite when disabled.</small></p>
+      </div>
+      <div>
+        <h3>Evaluation</h3>
+        <ul class="grid9">
+          <li>tapered material &amp; piece-square tables</li>
+          <li>pawn structure: doubled, isolated, passed</li>
+          <li>phalanx and connected pawns</li>
+          <li>mobility with safe squares, outposts</li>
+          <li>bishop pair, rooks on open files &amp; 7th</li>
+          <li>trapped bishops and rooks</li>
+          <li>king safety: shield, attack units, ring</li>
+          <li>threats, space, tempo, smooth phase</li>
+        </ul>
+        <h3 style="margin-top:14px">Measured</h3>
+        <p><b>109 / 150 (72.7 %)</b> on the 150-position tactical suite
+          (avg depth 3.9, ~5,700 nodes/second, pure Python).</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 4 ------------------------------------------------------------------ -->
+<section class="slide" data-title="Levels">
+  <header><p class="kicker">Opponents</p><h2>12 levels from 800 to 2250</h2></header>
+  <div class="body">
+    <div class="cols">
+      <div class="card">
+        <table>
+          <tr><th>Level</th><th>Elo</th><th>Depth</th><th>Time</th></tr>
+<tr><td>Pawn</td><td>800</td><td>1</td><td>120 ms</td></tr>
+<tr><td>Pawn+</td><td>950</td><td>1</td><td>200 ms</td></tr>
+<tr><td>Wood</td><td>1100</td><td>2</td><td>300 ms</td></tr>
+<tr><td>Wood+</td><td>1200</td><td>2</td><td>400 ms</td></tr>
+<tr><td>Stone</td><td>1300</td><td>3</td><td>600 ms</td></tr>
+<tr><td>Stone+</td><td>1400</td><td>3</td><td>800 ms</td></tr>
+<tr><td>Club</td><td>1500</td><td>5</td><td>1000 ms</td></tr>
+<tr><td>Club+</td><td>1650</td><td>6</td><td>1500 ms</td></tr>
+<tr><td>Expert</td><td>1800</td><td>7</td><td>2000 ms</td></tr>
+<tr><td>Expert+</td><td>1950</td><td>8</td><td>3000 ms</td></tr>
+<tr><td>Master</td><td>2100</td><td>9</td><td>4000 ms</td></tr>
+<tr><td>Master+</td><td>2250</td><td>10</td><td>6000 ms</td></tr>
+        </table>
+      </div>
+      <div>
+        <div class="card" style="margin-bottom:12px">
+          <h4>Levels are personalities, not just depths</h4>
+          <p>Every level carries its own depth cap, thinking time and a
+            deliberate blunder rate, so “Pawn” misses things the way a beginner
+            does instead of playing a shallow perfect move.</p>
+        </div>
+        <div class="card" style="margin-bottom:12px">
+          <h4>Stockfish, when you want the truth</h4>
+          <p>The in-app installer fetches a real Stockfish binary (about
+            113&nbsp;MB, on demand, never in the repository) for analysis and
+            for sparring far above the built-in levels.</p>
+        </div>
+        <div class="card">
+          <h4>Every variant, same engine</h4>
+          <p>Move generation is delegated to the variant-aware board, so the
+            engine also plays Chess960, Crazyhouse, Atomic, King of the Hill,
+            Three-check, Horde, Racing Kings, Antichess and Anarchchess.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 5 ------------------------------------------------------------------ -->
+<section class="slide" data-title="Anarchchess">
+  <header><p class="kicker">Variation 1</p><h2>Anarchchess — 15 house rules, each a switch</h2></header>
+  <div class="body">
+    <p class="lead" style="margin-bottom:.7em">The rules the community actually
+      plays, collected from r/AnarchyChess, anarchychess.org and the bots.
+      “Anarchchess” is the curated set; “Full anarchy” turns on all of them,
+      including the ones that wreck a game.</p>
+    <ul class="rules">
+<li><b>En passant is forced</b><span>If en passant is on the table, you must take it - declining is not a move.</span></li>
+<li><b>Knooks</b><span>Move a knight onto a friendly rook (or the other way round) and they fuse into a knook: rook and knight powers in one…</span></li>
+<li><b>c4 is explosive</b><span>The first piece to land on c4 detonates and kills everything in a one square radius - rooks and knooks shrug it off.</span></li>
+<li><b>Double check is an instant win</b><span>Give a double check and the game is over. (Pasta is optional.)</span></li>
+<li><b>The king cannot go to c2</b><span>c2 is simply not available to a king, on either side of the board.</span></li>
+<li><b>Il Vaticano</b><span>Two friendly bishops three squares apart on a diagonal with enemy pieces between them swap places and everything in b…</span></li>
+<li><b>Siberian Swipe</b><span>An unmoved rook may take the enemy rook directly across the board on the same file, jumping over everything in between.</span></li>
+<li><b>Vertical castling</b><span>With a rook on the king's file and a clear path, castle vertically.</span></li>
+<li><b>Knight boost</b><span>Promoting to a knight (or a knook) earns you an immediate extra move.</span></li>
+<li><b>Dismount</b><span>After a knight has moved it may dismount and become a pawn.</span></li>
+<li><b>Radioactive queen decay</b><span>Taking a queen irradiates the square: everything next to it dies too.</span></li>
+<li><b>Omnipotent pawn</b><span>A pawn standing on h3 (white) or h8 (black) moves like any piece.</span></li>
+<li><b>Promotion roulette</b><span>Promotions are random - and one time in five you get an enemy pawn.</span></li>
+<li><b>Hyper-accelerated Bongcloud</b><span>Play Ke2/Ke7 as your second move and win on the spot by asserting dominance.</span></li>
+<li><b>Random events</b><span>Each turn something may happen: an earthquake, a conscription, a fireball or a revolution that topples a random piece.</span></li>
+    </ul>
+  </div>
+</section>
+
+<!-- 6 ------------------------------------------------------------------ -->
+<section class="slide" data-title="Anarchess">
+  <header><p class="kicker">Variation 2</p><h2>Anarchess — the land before Chess</h2></header>
+  <div class="body">
+    <p class="lead">A real abstract strategy game by <b>Dimitris Grammenos</b>
+      (ICS-FORTH, Heraklion). Two proud tribes, no kings yet, growing a
+      landscape out of 32 light and 32 dark tiles. Reconstructed from the
+      published summary and playtested here for 2, 3 and 4 players.</p>
+    <div class="cols">
+      <div>
+        <h3>A turn</h3>
+        <ol>
+          <li><b>Lay one tile</b> next to the land — you choose light or dark.</li>
+          <li><b>Then one pawn action</b>, if you want it: settle a pawn from
+            your reserve, step one square, or attack a neighbour.</li>
+          <li>Attacks only land when the attacker is <b>supported</b> by a
+            friendly pawn. A tribe fights together.</li>
+        </ol>
+      </div>
+      <div>
+        <h3>Scoring</h3>
+        <p>An <b>area</b> is a maximal group of edge-connected tiles of one
+          colour. When the last tile is laid, every area of two or more tiles
+          scores one point per tile to whoever has the most pawns on it.
+          Single tiles are worth nothing.</p>
+        <p><small>Every open question in the reconstruction is a switch and a
+          recorded ruling — see <code>lc/anarchess/rules.py</code>.</small></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 7 ------------------------------------------------------------------ -->
+<section class="slide" data-title="Battle Chess">
+  <header><p class="kicker">Feature</p><h2>Battle Chess, on demand</h2></header>
+  <div class="body">
+    <div class="cols">
+      <div>
+        <h3>A switch, not an identity</h3>
+        <p class="lead">The studio is a study tool first. Battle Chess mode is a
+          toggle in the toolbar: on for the spectacle, off for analysis.</p>
+        <ul>
+          <li>Six kill choreographies, chosen by what takes what.</li>
+          <li>Procedural geometry and particles — <b>no gigabytes of assets</b>,
+            no downloads, works offline.</li>
+          <li>Gore level <b>classic</b>: the 1988 tone. Stylised blood spray and
+            debris, never gritty dismemberment.</li>
+          <li>Blood stains stay on the board for the rest of the game.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h4>Why procedural?</h4>
+        <p>The obvious route — the Battle Chess 9000 asset set — is roughly
+          1.2&nbsp;GB of models and textures. Rebuilding the choreographies out
+          of procedural geometry keeps the whole studio a few tens of
+          megabytes and makes the animation real-time instead of canned.</p>
+        <h4 style="margin-top:12px">Pieces that move</h4>
+        <p>A knight does not slide. It hops, lands, and turns to face whatever
+          it is about to kill.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 8 ------------------------------------------------------------------ -->
+<section class="slide" data-title="Learning">
+  <header><p class="kicker">Training</p><h2>An adaptive coach over real Lucas data</h2></header>
+  <div class="body">
+    <div class="big">
+      <div><b>112,198</b><span>puzzles imported from Lucas Chess</span></div>
+      <div><b>182</b><span>training sets, grouped by theme</span></div>
+      <div><b>10,000</b><span>master games to replay</span></div>
+      <div><b>6</b><span>categories: tactics, mates, endings, STS…</span></div>
+    </div>
+    <div class="cols">
+      <div class="card">
+        <h4>Not generated drills</h4>
+        <p>Every puzzle is parsed out of the real Lucas Chess sets: tactics,
+          mates in N, endgames, the Strategic Test Suite and positional
+          collections. Nothing is procedurally invented.</p>
+      </div>
+      <div class="card">
+        <h4>A coach that schedules</h4>
+        <p>Each puzzle you touch gets a box. Get it right and it drifts further
+          away (half a day → two days → a week → a month). Miss it and it comes
+          back tomorrow. Accuracy, streak and what is due are always visible.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 9 ------------------------------------------------------------------ -->
+<section class="slide" data-title="Four editions">
+  <header><p class="kicker">Availability</p><h2>One codebase, four editions</h2></header>
+  <div class="body">
+    <table>
+      <tr><th>Edition</th><th>What you install</th><th>Engine</th><th>Offline</th></tr>
+      <tr><td><b>Windows</b></td><td>Inno Setup installer, or a portable zip.
+        <small>Adds <code>.pgn</code> file associations.</small></td>
+        <td>Python core + optional Stockfish</td><td>yes</td></tr>
+      <tr><td><b>Linux</b></td><td>One-folder build + <code>install.sh</code>
+        into <code>~/.local</code>; ships a <code>.desktop</code> file and
+        AppStream metadata.</td><td>Python core + optional Stockfish</td><td>yes</td></tr>
+      <tr><td><b>Android</b></td><td>Nothing to sideload: open the site and
+        “Add to Home Screen”. It becomes a full-screen, offline app.</td>
+        <td>Python core under Pyodide</td><td>after first load</td></tr>
+      <tr><td><b>Browser</b></td><td>Nothing at all. <code>https://github.com/USERNAME/talos</code> →
+        play. A service worker caches the whole studio.</td>
+        <td>Python core under Pyodide</td><td>after first load</td></tr>
+    </table>
+    <p style="margin-top:14px"><small>Battle Chess mode (real-time 3D) and
+      Stockfish are desktop-only; everything else — engine, levels, puzzles,
+      Anarchchess, Anarchess, the coach — is identical in all four.</small></p>
+  </div>
+</section>
+
+<!-- 10 ---------------------------------------------------------------- -->
+<section class="slide" data-title="How the web edition works">
+  <header><p class="kicker">Architecture</p><h2>The same Python, in a tab</h2></header>
+  <div class="body">
+    <div class="steps" style="margin-bottom:26px">
+      <div class="step">
+        <h4>The real modules</h4>
+        <p><code>tools/build_web.py</code> copies <code>engine.py</code>,
+          <code>anarchchess.py</code>, <code>anarchess/rules.py</code>,
+          <code>anarchess/ai.py</code> and vendored python-chess into
+          <code>web/python/</code>. No rewrites, no ports.</p>
+      </div>
+      <div class="step">
+        <h4>A worker runs them</h4>
+        <p>Pyodide boots in a Web Worker, mounts those files and imports
+          <code>bridge.py</code>: a JSON-in / JSON-out API. The UI never blocks
+          while the engine thinks.</p>
+      </div>
+      <div class="step">
+        <h4>Everything is cached</h4>
+        <p>A service worker stores the shell, the Python core and the sets.
+          The 2&nbsp;MB puzzle file is fetched only when you open a set, then
+          cached. Second visit: works with the wifi off.</p>
+      </div>
+    </div>
+    <div class="cols3">
+      <div class="card"><h4>1.1 MB</h4><p>Python core, vendored and ready.</p></div>
+      <div class="card"><h4>82 checks</h4><p><code>tools/web_smoke.mjs</code>
+        boots the payload in Node and plays a game, a puzzle and an Anarchess
+        turn on every push.</p></div>
+      <div class="card"><h4>0 requests</h4><p>to any TALOS server, ever. There
+        is no TALOS server.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- 11 ---------------------------------------------------------------- -->
+<section class="slide" data-title="The icon">
+  <header><p class="kicker">Identity</p><h2>A mark made of both parents</h2></header>
+  <div class="body">
+    <div class="iconrow">
+      <svg class="app" viewBox="0 0 13 13" role="img" aria-label="TALOS icon">
+  <title>TALOS - The Living Chess Studio</title>
+  <defs>
+    <linearGradient id="plate" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0e1015"/>
+      <stop offset="1" stop-color="#1a1e29"/>
+    </linearGradient>
+  </defs>
+  <rect width="13" height="13" rx="3.05" fill="url(#plate)"/>
+  <rect x="0.58" y="0.58" width="11.84" height="11.84" rx="2.6"
+        fill="none" stroke="#f0b429" stroke-opacity="0.82" stroke-width="0.18"/>
+  <g>
+    <rect x="3.10" y="1.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="6.10" y="1.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="3.10" y="2.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="4.10" y="2.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="5.10" y="2.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="6.10" y="2.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="3.10" y="3.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="4.10" y="3.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="5.10" y="3.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="6.10" y="3.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="7.10" y="3.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="2.10" y="4.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="3.10" y="4.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="4.10" y="4.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="5.10" y="4.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="6.10" y="4.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="7.10" y="4.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="8.10" y="4.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="2.10" y="5.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="3.10" y="5.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="4.10" y="5.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="5.10" y="5.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="6.10" y="5.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="7.10" y="5.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="8.10" y="5.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="2.10" y="6.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="3.10" y="6.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="4.10" y="6.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="5.10" y="6.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="6.10" y="6.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="7.10" y="6.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="8.10" y="6.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="9.10" y="6.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="2.10" y="7.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="3.10" y="7.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="4.10" y="7.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="5.10" y="7.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="6.10" y="7.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="7.10" y="7.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="8.10" y="7.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="9.10" y="7.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="2.10" y="8.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="3.10" y="8.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="4.10" y="8.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="5.10" y="8.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="6.10" y="8.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="7.10" y="8.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="8.10" y="8.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="9.10" y="8.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="10.10" y="8.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="3.10" y="9.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="4.10" y="9.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="5.10" y="9.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="6.10" y="9.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="7.10" y="9.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="8.10" y="9.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="9.10" y="9.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="10.10" y="9.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="4.10" y="10.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="5.10" y="10.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="6.10" y="10.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="7.10" y="10.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="8.10" y="10.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="9.10" y="10.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="10.10" y="10.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="3.10" y="11.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="4.10" y="11.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="5.10" y="11.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="6.10" y="11.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="7.10" y="11.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="8.10" y="11.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="9.10" y="11.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="3.10" y="12.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="4.10" y="12.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="5.10" y="12.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="6.10" y="12.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="7.10" y="12.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="8.10" y="12.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="9.10" y="12.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="10.10" y="12.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="11.10" y="12.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+  </g>
+</svg>
+      <div>
+        <ul class="ingredients">
+          <li><b>The knight</b> — Lucas Chess' own silhouette, drawn as a
+            vector so it survives being 16 pixels wide.</li>
+          <li><b>The loose tiles</b> — Anarchess' board before it was squeezed
+            into the rigid chessboard: light and dark squares, floating free,
+            no 8×8 grid yet.</li>
+          <li><b>The amber plate</b> — the Cretan light the studio was built in,
+            and the accent colour of the whole interface.</li>
+        </ul>
+        <div class="cols3" style="margin-top:18px">
+          <div class="card"><h4>17 files</h4><p>from a 16&nbsp;px favicon to a
+            1024&nbsp;px master, plus maskable and Apple touch variants.</p></div>
+          <div class="card"><h4>Drawn, not prompted</h4>
+            <p><code>tools/make_icon.py</code> rasterises real glyphs and lays
+              out the tiles, so the set can be regenerated exactly.</p></div>
+          <div class="card"><h4>Readable at 16 px</h4>
+            <p>Measured: the knight fills 61&nbsp;% of the mark and the tiles
+              stay legible down to the favicon.</p></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 12 ---------------------------------------------------------------- -->
+<section class="slide" data-title="Releases">
+  <header><p class="kicker">Shipping</p><h2>Tag it, and everything updates</h2></header>
+  <div class="body">
+    <div class="steps">
+      <div class="step">
+        <h4>CI, on every push</h4>
+        <p>Self-tests on Linux, macOS and Windows across three Python
+          versions, a packaging smoke build, and the browser smoke test.</p>
+      </div>
+      <div class="step">
+        <h4>Tag <code>v2.0.0</code></h4>
+        <p>Three build jobs produce a Windows zip, a Linux tarball and a macOS
+          app zip, and a release job lifts that version's section out of
+          <code>CHANGELOG.md</code>.</p>
+      </div>
+      <div class="step">
+        <h4>Draft release + Pages</h4>
+        <p>A draft release appears with the notes and a
+          <code>SHA256SUMS.txt</code>; publishing it publishes the site too:
+          the deck as the landing page, the playable app at
+          <code>/web/</code>.</p>
+      </div>
+    </div>
+    <div class="cols3" style="margin-top:22px">
+      <div class="card"><h4>Reproducible</h4><p>Every artefact is built from a
+        clean checkout by the same script you can run locally.</p></div>
+      <div class="card"><h4>Verifiable</h4><p><code>sha256sum -c</code> against
+        the checksums attached to the release.</p></div>
+      <div class="card"><h4>Reversible</h4><p>Releases open as drafts — nothing
+        goes out until somebody reads it and presses publish.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- 13 ---------------------------------------------------------------- -->
+<section class="slide" data-title="Roadmap">
+  <header><p class="kicker">Next</p><h2>What is left, honestly</h2></header>
+  <div class="body">
+    <div class="cols">
+      <div>
+        <h3>Soon</h3>
+        <ul>
+          <li>Deeper search: the bench suite is at <b>109 / 150 (72.7 %)</b>; the next
+            wins are in move ordering and the endgame tables.</li>
+          <li>More of the Lucas corpus: openings trainer and the replay
+            database in the browser edition.</li>
+          <li>Battle Chess choreographies for the remaining piece pairings.</li>
+          <li>A macOS notarised build (the job exists; it needs a certificate).</li>
+        </ul>
+      </div>
+      <div>
+        <h3>Contributing</h3>
+        <ul>
+          <li><code>./tools/setup_env.sh</code>, then
+            <code>python run.py</code>.</li>
+          <li><code>python tools/selftest.py</code> must stay at 100&nbsp;%,
+            and every change adds a check.</li>
+          <li>Engine changes must quote
+            <code>tools/bench.py</code> numbers in the pull request.</li>
+          <li>GPL v2 or later, like Lucas Chess.</li>
+        </ul>
+      </div>
+    </div>
+    <p class="lead" style="margin-top:18px">TALOS is named for the bronze
+      guardian of Crete: made on the island, for the island, and for anyone who
+      wants a chess studio that is theirs.</p>
+  </div>
+</section>
+
+</main>
+
+<footer class="bar">
+  <button id="prev" aria-label="Previous slide">←</button>
+  <button id="next" aria-label="Next slide">→</button>
+  <div class="dots" id="dots"></div>
+  <div class="spacer"></div>
+  <span class="hint">← → or space to move · O overview · F fullscreen · P print</span>
+</footer>
+
+<script>
+(function(){
+  var slides = Array.prototype.slice.call(document.querySelectorAll(".slide"));
+  var dots = document.getElementById("dots");
+  var counter = document.getElementById("counter");
+  var bar = document.getElementById("bar");
+  var index = 0;
+
+  slides.forEach(function(slide, i){
+    var dot = document.createElement("i");
+    dot.title = slide.dataset.title || (i + 1);
+    dot.addEventListener("click", function(){ go(i); });
+    dots.appendChild(dot);
+  });
+
+  function paint(){
+    slides.forEach(function(slide, i){ slide.classList.toggle("active", i === index); });
+    Array.prototype.forEach.call(dots.children, function(dot, i){
+      dot.classList.toggle("on", i === index);
+    });
+    counter.textContent = (index + 1) + " / " + slides.length;
+    bar.style.width = ((index + 1) / slides.length * 100) + "%";
+    if (location.hash !== "#" + (index + 1)) {
+      history.replaceState(null, "", "#" + (index + 1));
+    }
+  }
+
+  function go(n){
+    index = Math.max(0, Math.min(slides.length - 1, n));
+    paint();
+  }
+
+  document.getElementById("prev").addEventListener("click", function(){ go(index - 1); });
+  document.getElementById("next").addEventListener("click", function(){ go(index + 1); });
+
+  document.addEventListener("keydown", function(event){
+    if (event.metaKey || event.ctrlKey || event.altKey) return;
+    switch (event.key) {
+      case "ArrowRight": case "PageDown": case " ": case "Enter": go(index + 1); break;
+      case "ArrowLeft": case "PageUp": case "Backspace": go(index - 1); break;
+      case "Home": go(0); break;
+      case "End": go(slides.length - 1); break;
+      case "o": case "O": document.body.classList.toggle("over"); break;
+      case "f": case "F":
+        if (document.fullscreenElement) document.exitFullscreen();
+        else document.documentElement.requestFullscreen();
+        break;
+      case "p": case "P": window.print(); break;
+      default: return;
+    }
+    event.preventDefault();
+  });
+
+  // swipe, for the phone
+  var startX = null;
+  document.addEventListener("touchstart", function(e){ startX = e.touches[0].clientX; }, {passive:true});
+  document.addEventListener("touchend", function(e){
+    if (startX === null) return;
+    var dx = e.changedTouches[0].clientX - startX;
+    if (Math.abs(dx) > 45) go(index + (dx < 0 ? 1 : -1));
+    startX = null;
+  });
+
+  document.getElementById("deck").addEventListener("click", function(event){
+    if (!document.body.classList.contains("over")) return;
+    var slide = event.target.closest(".slide");
+    if (!slide) return;
+    go(slides.indexOf(slide));
+    document.body.classList.remove("over");
+  });
+
+  var fromHash = parseInt((location.hash || "").replace("#", ""), 10);
+  if (fromHash >= 1 && fromHash <= slides.length) index = fromHash - 1;
+  paint();
+})();
+</script>
+</body>
+</html>

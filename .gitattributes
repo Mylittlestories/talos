@@ -1,0 +1,11 @@
+# the imported Lucas Chess database is binary - never diff or normalise it
+data/lucas.db binary
+assets/*.png binary
+assets/*.ico binary
+
+# generated for the browser build
+web/python/** linguist-generated
+web/data/*.json linguist-generated
+
+# keep text files with LF endings everywhere
+* text=auto eol=lf

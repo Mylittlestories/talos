@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>TALOS — The Living Chess Studio</title>
+<meta name="description" content="A local chess studio in your browser: the TALOS engine, 112,000 Lucas Chess puzzles, Anarchess and Anarchchess. Installable, works offline.">
+<meta name="theme-color" content="#0e1015">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/favicon.ico" sizes="any">
+<link rel="icon" href="icons/talos-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <svg class="mark" viewBox="0 0 13 13" aria-hidden="true">
+      <rect width="13" height="13" rx="3.05" fill="#12151c"/>
+      <rect x="0.58" y="0.58" width="11.84" height="11.84" rx="2.6"
+            fill="none" stroke="#f0b429" stroke-opacity="0.85" stroke-width="0.18"/>
+      <g id="mark-tiles"></g>
+    </svg>
+    <div class="brand-text">
+      <strong>TALOS</strong>
+      <span>The Living Chess Studio</span>
+    </div>
+  </div>
+  <nav class="tabs" role="tablist">
+    <button class="tab active" data-view="play">Play</button>
+    <button class="tab" data-view="train">Train</button>
+    <button class="tab" data-view="anarchess">Anarchess</button>
+    <button class="tab" data-view="rules">Rules</button>
+  </nav>
+</header>
+
+<main>
+  <!-- ---------------------------------------------------------------- play -->
+  <section class="view active" id="view-play">
+    <div class="boardwrap">
+      <div class="board" id="board" role="grid" aria-label="Chess board"></div>
+      <div class="ranks" id="ranks" aria-hidden="true"></div>
+      <div class="files" id="files" aria-hidden="true"></div>
+    </div>
+
+    <aside class="side">
+      <div class="card status">
+        <div class="turn" id="turn-chip">White to move</div>
+        <div class="status-text" id="status-text">Starting position</div>
+        <div class="material">
+          <span><i class="w"></i><b id="mat-w">0</b></span>
+          <span><i class="b"></i><b id="mat-b">0</b></span>
+        </div>
+      </div>
+
+      <div class="card controls">
+        <div class="row">
+          <label for="variant">Game</label>
+          <select id="variant">
+            <option value="standard">Standard chess</option>
+            <option value="anarchchess">Anarchchess</option>
+            <option value="anarchy">Full anarchy</option>
+          </select>
+        </div>
+        <div class="row">
+          <label for="level">Engine</label>
+          <select id="level"></select>
+        </div>
+        <div class="row">
+          <label for="side">You play</label>
+          <select id="side">
+            <option value="w">White</option>
+            <option value="b">Black</option>
+            <option value="none">Watch (engine vs engine)</option>
+          </select>
+        </div>
+        <div class="buttons">
+          <button id="btn-new">New game</button>
+          <button id="btn-undo">Undo</button>
+          <button id="btn-flip">Flip</button>
+          <button id="btn-hint">Hint</button>
+        </div>
+      </div>
+
+      <div class="card moves">
+        <h3>Moves</h3>
+        <ol id="movelist" class="movelist"></ol>
+      </div>
+    </aside>
+  </section>
+
+  <!-- --------------------------------------------------------------- train -->
+  <section class="view" id="view-train">
+    <div class="boardwrap">
+      <div class="board" id="tboard" role="grid" aria-label="Puzzle board"></div>
+    </div>
+    <aside class="side">
+      <div class="card">
+        <h3>Training set</h3>
+        <input id="set-search" type="search" placeholder="Search 182 sets…"
+               autocomplete="off">
+        <select id="set-picker" size="8"></select>
+        <p class="dim" id="set-info">Loading sets…</p>
+      </div>
+      <div class="card">
+        <div class="score-row">
+          <span>Solved <b id="t-solved">0</b></span>
+          <span>Missed <b id="t-failed">0</b></span>
+          <span>Streak <b id="t-streak">0</b></span>
+        </div>
+        <div class="buttons">
+          <button id="btn-tnext">Skip</button>
+          <button id="btn-thint">Hint</button>
+          <button id="btn-tshow">Show</button>
+        </div>
+        <p class="feedback" id="t-feedback">Pick a set to start.</p>
+      </div>
+      <div class="card" id="learn-card">
+        <h3>Your progress</h3>
+        <p class="dim" id="learn-summary">Answer a few and the coach starts
+          scheduling reviews.</p>
+      </div>
+    </aside>
+  </section>
+
+  <!-- ----------------------------------------------------------- anarchess -->
+  <section class="view" id="view-anarchess">
+    <div class="boardwrap tall">
+      <canvas id="an-canvas" aria-label="Anarchess board"></canvas>
+      <div class="an-hint" id="an-hint">Lay a tile</div>
+    </div>
+    <aside class="side">
+      <div class="card">
+        <h3>The land before Chess</h3>
+        <p class="dim" id="an-status">A new game is starting…</p>
+        <div class="row">
+          <label for="an-players">Players</label>
+          <select id="an-players">
+            <option value="2">2 (8 pawns each)</option>
+            <option value="3">3 (6 pawns each)</option>
+            <option value="4">4 (5 pawns each)</option>
+          </select>
+        </div>
+        <div class="row">
+          <label for="an-level">Opponents</label>
+          <select id="an-level">
+            <option value="1">Settler</option>
+            <option value="2" selected>Tribe</option>
+            <option value="3">Warlord</option>
+          </select>
+        </div>
+        <label class="check"><input type="checkbox" id="an-bag">
+          Draw tiles from a bag</label>
+        <div class="buttons">
+          <button id="btn-annew">New game</button>
+          <button id="btn-anpass">Skip pawn action</button>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Tribes</h3>
+        <div id="an-players-list"></div>
+      </div>
+      <div class="card">
+        <h3>How it works</h3>
+        <ol class="small dim">
+          <li>Lay one tile next to the land.</li>
+          <li>Then, if you want, one pawn action: settle, step or attack.</li>
+          <li>When the last tile is laid, every area of two or more tiles
+              scores for whoever holds it.</li>
+        </ol>
+      </div>
+    </aside>
+  </section>
+
+  <!-- --------------------------------------------------------------- rules -->
+  <section class="view" id="view-rules">
+    <div class="prose">
+      <h2>Anarchchess</h2>
+      <p class="lead">The house rules the community plays, collected from
+        r/AnarchyChess, anarchychess.org and the Anarchchess bots. Every rule
+        is a switch: turn it off and it simply does not exist.</p>
+      <div class="presets">
+        <button id="preset-curated">Anarchchess (curated)</button>
+        <button id="preset-anarchy">Full anarchy</button>
+        <button id="preset-off">All off</button>
+      </div>
+      <div id="rule-list" class="rules"></div>
+
+      <h2>Anarchess</h2>
+      <p>A reconstruction of the game by Dimitris Grammenos (FORTH). Two to
+        four players share 32 light and 32 dark tiles and grow a landscape;
+        the player with the most pawns in an area of two or more tiles scores
+        it. The published sources describe the components and the scoring but
+        leave several mechanics open, so this build documents each decision
+        rather than guessing quietly.</p>
+      <div class="presets">
+        <button id="an-open">Open Anarchess</button>
+      </div>
+
+      <h2>About this build</h2>
+      <p>The engine, the Anarchess rules and the Anarchchess rules running in
+        this page are the <em>same Python files</em> the desktop application
+        uses, executed by Pyodide. Nothing is rewritten for the browser, and
+        after the first visit everything is cached: it works on a plane.</p>
+      <p class="dim" id="version-line"></p>
+    </div>
+  </section>
+</main>
+
+<div class="loader" id="loader">
+  <div class="loader-inner">
+    <div class="spinner"></div>
+    <p id="loader-text">Starting the engine…</p>
+    <p class="dim small" id="loader-sub">Loading Python (about 10 MB, cached
+      after the first visit)</p>
+  </div>
+</div>
+
+<footer class="footer">
+  <span>TALOS — GPL v2 or later. Everything runs on your device.</span>
+  <span id="engine-state" class="dim"></span>
+</footer>
+
+<script src="js/app.js" type="module"></script>
+</body>
+</html>

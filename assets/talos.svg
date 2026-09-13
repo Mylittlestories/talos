@@ -1,0 +1,96 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 13 13"
+     width="512" height="512" role="img" aria-label="TALOS">
+  <title>TALOS - The Living Chess Studio</title>
+  <defs>
+    <linearGradient id="plate" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0e1015"/>
+      <stop offset="1" stop-color="#1a1e29"/>
+    </linearGradient>
+  </defs>
+  <rect width="13" height="13" rx="3.05" fill="url(#plate)"/>
+  <rect x="0.58" y="0.58" width="11.84" height="11.84" rx="2.6"
+        fill="none" stroke="#f0b429" stroke-opacity="0.82" stroke-width="0.18"/>
+  <g>
+    <rect x="3.10" y="1.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="6.10" y="1.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="3.10" y="2.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="4.10" y="2.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="5.10" y="2.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="6.10" y="2.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="3.10" y="3.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="4.10" y="3.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="5.10" y="3.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="6.10" y="3.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="7.10" y="3.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="2.10" y="4.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="3.10" y="4.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="4.10" y="4.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="5.10" y="4.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="6.10" y="4.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="7.10" y="4.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="8.10" y="4.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="2.10" y="5.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="3.10" y="5.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="4.10" y="5.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="5.10" y="5.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="6.10" y="5.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="7.10" y="5.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="8.10" y="5.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="2.10" y="6.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="3.10" y="6.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="4.10" y="6.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="5.10" y="6.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="6.10" y="6.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="7.10" y="6.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="8.10" y="6.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="9.10" y="6.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="2.10" y="7.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="3.10" y="7.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="4.10" y="7.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="5.10" y="7.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="6.10" y="7.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="7.10" y="7.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="8.10" y="7.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="9.10" y="7.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="2.10" y="8.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="3.10" y="8.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="4.10" y="8.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="5.10" y="8.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="6.10" y="8.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="7.10" y="8.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="8.10" y="8.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="9.10" y="8.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="10.10" y="8.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="3.10" y="9.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="4.10" y="9.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="5.10" y="9.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="6.10" y="9.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="7.10" y="9.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="8.10" y="9.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="9.10" y="9.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="10.10" y="9.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="4.10" y="10.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="5.10" y="10.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="6.10" y="10.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="7.10" y="10.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="8.10" y="10.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="9.10" y="10.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="10.10" y="10.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="3.10" y="11.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="4.10" y="11.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="5.10" y="11.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="6.10" y="11.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="7.10" y="11.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="8.10" y="11.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="9.10" y="11.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="3.10" y="12.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="4.10" y="12.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="5.10" y="12.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="6.10" y="12.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="7.10" y="12.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="8.10" y="12.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="9.10" y="12.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+    <rect x="10.10" y="12.10" width="0.80" height="0.80" rx="0.13" fill="#f2ede1"/>
+    <rect x="11.10" y="12.10" width="0.80" height="0.80" rx="0.13" fill="#8d6a48"/>
+  </g>
+</svg>

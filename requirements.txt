@@ -1,0 +1,7 @@
+# Lucas Chess NX dependencies
+PyQt6>=6.5
+python-chess>=1.10
+numpy>=1.24          # optional, speeds up statistics
+PyOpenGL>=3.1.6      # required for the Battle Chess 3D mode
+PyOpenGL-accelerate>=3.1.6  # optional
+PyQt6-WebEngine>=6.5  # optional (not needed by default)

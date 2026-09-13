@@ -1,0 +1,27 @@
+{
+  "name": "TALOS — The Living Chess Studio",
+  "short_name": "TALOS",
+  "description": "A local chess studio that runs entirely on your device: the TALOS engine, 15,000 Lucas Chess puzzles, Anarchess and Anarchchess.",
+  "lang": "en",
+  "dir": "ltr",
+  "start_url": "./index.html",
+  "id": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
+  "orientation": "any",
+  "background_color": "#0e1015",
+  "theme_color": "#0e1015",
+  "categories": ["games", "education"],
+  "icons": [
+    { "src": "icons/talos-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/talos-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/talos-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/talos.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ],
+  "shortcuts": [
+    { "name": "Play", "short_name": "Play", "url": "./index.html#play" },
+    { "name": "Train", "short_name": "Train", "url": "./index.html#train" },
+    { "name": "Anarchess", "short_name": "Anarchess", "url": "./index.html#anarchess" }
+  ]
+}
