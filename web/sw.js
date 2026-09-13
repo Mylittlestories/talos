@@ -10,7 +10,7 @@
  * first time you actually open a training set).
  */
 
-const VERSION = "talos-2.0.1";          // bump with every release
+const VERSION = "talos-2.0.2";          // bump with every release
 const SHELL = [
   "./",
   "./index.html",

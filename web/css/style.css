@@ -88,18 +88,20 @@ main { flex: 1; padding: 16px; }
    a few pixels on almost every move, which reads as the board "breathing". */
 .boardwrap {
   position: relative;
-  flex: 0 1 auto;
-  /* the same expression the board uses, so the rank and file labels pinned to
-     this box stay glued to the edges of the board */
-  width: min(640px, 100%, calc(100vh - 210px));
+  flex: 0 0 auto;          /* never shrink because a sibling grew */
+  /* Big enough to feel like the main event, still bounded so it always fits:
+     the width term leaves room for the side panel, the height term keeps the
+     whole board above the fold. Both are viewport-only, so nothing the page
+     does - a longer move list, a wrapped status line - can move the board. */
+  width: max(320px, min(760px, calc(100vw - 480px), calc(100vh - 240px)));
 }
-.boardwrap.tall { min-height: 460px; width: min(640px, 100%); }
+.boardwrap.tall { min-height: 460px; width: min(760px, 100%); }
 
 .board {
   display: grid;
   grid-template-columns: repeat(8, 1fr);
   aspect-ratio: 1;
-  width: min(100%, calc(100vh - 210px));
+  width: 100%;             /* the wrapper is already the right size */
   margin: 0 auto;
   border-radius: var(--radius);
   overflow: hidden;

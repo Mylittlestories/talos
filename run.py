@@ -37,6 +37,31 @@ def _install_excepthook() -> None:
     sys.excepthook = hook
 
 
+def _app_icon():
+    """The TALOS mark, for the window title bar and the taskbar.
+
+    PyInstaller stamps the icon into the Windows and macOS bundles, but the
+    running window only shows it if the application is told about it - and on
+    Linux the bundle carries no icon at all, so the window used to come up
+    with Qt's default.
+    """
+    from PyQt6.QtGui import QIcon
+
+    root = os.path.dirname(os.path.abspath(__file__))
+    # inside a one-file bundle the assets sit next to the executable
+    bases = [getattr(sys, "_MEIPASS", root), root]
+    icon = QIcon()
+    for name in ("assets/talos-16.png", "assets/talos-32.png",
+                 "assets/talos-48.png", "assets/talos-128.png",
+                 "assets/talos-256.png", "assets/favicon.ico"):
+        for base in bases:
+            path = os.path.join(base, name)
+            if os.path.exists(path):
+                icon.addFile(path)
+                break
+    return icon
+
+
 def _saved_theme() -> str:
     """The interface theme the player last picked."""
     import json
@@ -68,6 +93,7 @@ def main() -> int:
     app.setOrganizationName("TALOS")
     app.setApplicationVersion(APP_VERSION)
     app.setStyle("Fusion")
+    app.setWindowIcon(_app_icon())
     theme.apply(_saved_theme())
 
     from lc.ui.main_window import MainWindow

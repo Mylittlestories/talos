@@ -16,6 +16,32 @@ Nothing yet.
 
 ---
 
+## [2.0.2] — The icon and the room to play
+
+### Fixed
+
+- **The board now has an icon, and room to breathe.** The desktop window
+  carried Qt's default mark on Linux: PyInstaller stamps the icon into the
+  Windows and macOS bundles, but the running window only shows it if the
+  application is told about it. TALOS now sets its own window icon on every
+  platform, at every size from 16 to 256 pixels, so it is the same mark in the
+  title bar, the taskbar and the Alt-Tab switcher.
+- **The browser edition ships its icons.** `web/icons/` was generated at build
+  time and deliberately not committed, so a fresh clone - or anything served
+  straight out of the repository - showed the browser's blank-page icon
+  instead of TALOS. The six icon files are now in the repository. They are
+  279 KB in total and regenerate byte for byte, so nothing drifts.
+
+### Changed
+
+- **The board uses the space it has.** Capping it at 640 px left a 1080p
+  screen looking mostly empty, which read as flimsy rather than calm. It now
+  grows to `min(760px, 100vw - 480px, 100vh - 240px)` - 760 px on a 1080p
+  screen, and it still comes only from the viewport, so a longer move list or
+  a wrapped status line cannot move it by a pixel.
+
+---
+
 ## [2.0.1] — Fixes
 
 Three fixes, all from hands-on play rather than from theory.
