@@ -43,6 +43,11 @@ jobs:
           mkdir -p _site/web
           cp presentation/index.html _site/index.html
           cp -r web/. _site/web/
+          # In the repo the deck sits in presentation/, so it links up and out
+          # to ../web/. At the site root the app is simply ./web/. (The page
+          # also probes at runtime; this makes the link right without it.)
+          sed -i 's|href="../web/index.html"|href="web/index.html"|' _site/index.html
+          grep -o 'id="play-link" href="[^"]*"' _site/index.html
 
       - uses: actions/configure-pages@v5
 
