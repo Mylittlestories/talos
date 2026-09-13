@@ -268,9 +268,12 @@ body.over .slide.active{outline:2px solid var(--accent)}
           the Anarchchess house rules and the Anarchess board game — on Windows,
           Linux, Android and in a browser tab.</p>
         <div class="cta">
-          <a class="primary" href="web/index.html">Play in your browser</a>
+          <a class="primary" id="play-link" href="../web/index.html">Play in your browser</a>
           <a class="ghost" href="__REPO__">Source &amp; downloads</a>
         </div>
+        <p style="color:var(--dim); font-size:12.5px; margin-top:12px">
+          Nothing to install. From a clone, run <code>python tools/build_web.py</code>
+          first — it writes the Python payload the page loads.</p>
       </div>
     </div>
   </div>
@@ -751,6 +754,26 @@ __RULES__
   var fromHash = parseInt((location.hash || "").replace("#", ""), 10);
   if (fromHash >= 1 && fromHash <= slides.length) index = fromHash - 1;
   paint();
+})();
+</script>
+
+<script>
+/* The deck sits in presentation/ inside the repository, but at the site root
+   once GitHub Pages publishes it — so the path to the playable app is
+   different in the two places.  Probe once and point the button at whichever
+   one is actually there. */
+(function(){
+  var link = document.getElementById("play-link");
+  if (!link || !/^https?:$/.test(location.protocol)) return;
+  var candidates = ["../web/index.html", "web/index.html", "../../web/index.html"];
+  var at = 0;
+  (function attempt(){
+    if (at >= candidates.length) return;
+    var href = candidates[at++];
+    fetch(href.replace("index.html", "python/files.json"))
+      .then(function(res){ if (res.ok) link.href = href; else attempt(); })
+      .catch(function(){ attempt(); });
+  })();
 })();
 </script>
 </body>
