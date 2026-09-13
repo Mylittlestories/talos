@@ -22,6 +22,25 @@ os.makedirs(OUT, exist_ok=True)
 app = QApplication(sys.argv[:1])
 
 
+def keep(name: str, minimum_colours: int = 2000) -> bool:
+    """Throw away frames the 3D view failed to draw.
+
+    On a machine without a working OpenGL context the QOpenGLWidget stays a
+    black rectangle: the window still grabs, it just grabs nothing. A real
+    screenshot has thousands of distinct colours, an empty one has a handful,
+    so this is a cheap way to avoid shipping blank images.
+    """
+    path = os.path.join(OUT, name)
+    if not os.path.exists(path):
+        return False
+    colours = len(Image.open(path).convert("RGB").getcolors(1 << 16) or [])
+    if colours >= minimum_colours:
+        return True
+    os.remove(path)
+    print("  skipped " + name + " (the 3D view drew nothing - no GL context)")
+    return False
+
+
 def spin(ms: int) -> None:
     loop = QEventLoop()
     QTimer.singleShot(ms, loop.quit)
@@ -102,7 +121,8 @@ if battle is not None:
     battle.sync_position(board)
     spin(700)
     window.grab().save(os.path.join(OUT, "03-battle-board.png"))
-    print("03-battle-board.png")
+    if keep("03-battle-board.png"):
+        print("03-battle-board.png")
 
     # capture with a fight, recorded as an animated gif
     before = chess.Board("r1bqk2r/pppp1ppp/2n2n2/2b1N3/4P3/2N5/PPPP1PPP/R1BQK2R b KQkq - 0 6")
@@ -125,9 +145,14 @@ if battle is not None:
         gif_path = os.path.join(OUT, "04-battle-fight.gif")
         images[0].save(gif_path, save_all=True, append_images=images[1:],
                        duration=90, loop=0, optimize=True)
-        print(f"04-battle-fight.gif ({len(images)} frames)")
+        if sum(os.path.getsize(gif_path) for _ in [0]) > 20000:
+            print(f"04-battle-fight.gif ({len(images)} frames)")
+        elif os.path.exists(gif_path):
+            os.remove(gif_path)
+            print("  skipped 04-battle-fight.gif (nothing was drawn)")
     window.grab().save(os.path.join(OUT, "05-battle-after.png"))
-    print("05-battle-after.png")
+    if keep("05-battle-after.png"):
+        print("05-battle-after.png")
     window.battle_action.setChecked(False)
     window.toggle_battle()
 
@@ -165,5 +190,16 @@ spin(500)
 dialog.grab().save(os.path.join(OUT, "07-explorer.png"))
 print("07-explorer.png")
 dialog.close()
+
+# ------------------------------------------------------------- 8. anarchess
+from lc.anarchess.dialog import AnarchessDialog          # noqa: E402
+
+anarchess = AnarchessDialog(window)
+anarchess.show()
+spin(600)
+anarchess.grab().save(os.path.join(OUT, "08-anarchess.png"))
+if keep("08-anarchess.png", 300):
+    print("08-anarchess.png")
+anarchess.close()
 
 print("screenshots written to", os.path.abspath(OUT))

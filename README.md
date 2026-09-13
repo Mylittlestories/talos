@@ -18,7 +18,7 @@ python run.py
 
 | Edition | How you get it | Notes |
 |---|---|---|
-| **Browser** | open the [Pages site](https://github.com/USERNAME/talos) → *Play in your browser*, or serve `web/` locally | nothing to install; works offline after the first visit |
+| **Browser** | open the [Pages site](https://github.com/Mylittlestories/talos) → *Play in your browser*, or serve `web/` locally | nothing to install; works offline after the first visit |
 | **Android** | open the site in Chrome → **Add to Home Screen** | a real full-screen app icon, no APK, no store |
 | **Windows** | `TALOS-<version>-windows-x86_64.zip` from the release, or the Inno Setup installer | `.pgn` association, portable zip, no admin rights needed |
 | **Linux** | `TALOS-<version>-linux-x86_64.tar.gz` → `./install.sh` | installs into `~/.local`, ships `.desktop` + AppStream metadata |

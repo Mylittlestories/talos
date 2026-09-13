@@ -23,14 +23,26 @@
   <screenshots>
     <screenshot type="default">
       <caption>The board, with analysis and the move list</caption>
-      <image>https://raw.githubusercontent.com/USERNAME/TALOS/main/docs/img/chess.png</image>
+      <image>https://raw.githubusercontent.com/Mylittlestories/talos/main/docs/img/01-playing.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Training on a real Lucas Chess puzzle</caption>
+      <image>https://raw.githubusercontent.com/Mylittlestories/talos/main/docs/img/02-training.png</image>
     </screenshot>
     <screenshot>
       <caption>Anarchess - the land before Chess</caption>
-      <image>https://raw.githubusercontent.com/USERNAME/TALOS/main/docs/img/anarchess.png</image>
+      <image>https://raw.githubusercontent.com/Mylittlestories/talos/main/docs/img/08-anarchess.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Crazyhouse, one of the ten variants the engine also plays</caption>
+      <image>https://raw.githubusercontent.com/Mylittlestories/talos/main/docs/img/06-crazyhouse.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>The opening explorer, over 6,633 openings</caption>
+      <image>https://raw.githubusercontent.com/Mylittlestories/talos/main/docs/img/07-explorer.png</image>
     </screenshot>
   </screenshots>
-  <url type="homepage">https://github.com/USERNAME/TALOS</url>
+  <url type="homepage">https://github.com/Mylittlestories/talos</url>
   <content_rating type="oars-1.1">
     <content_attribute id="violence-cartoon">mild</content_attribute>
     <content_attribute id="violence-fantasy">mild</content_attribute>

@@ -35,7 +35,7 @@ ICON = os.path.join(ROOT, "assets", "talos.svg")
 DB = os.path.join(ROOT, "data", "lucas.db")
 
 #: Replace once, before the first push - it is used for every repo link.
-REPO = "https://github.com/USERNAME/talos"
+REPO = "https://github.com/Mylittlestories/talos"
 
 
 # --------------------------------------------------------------------------
