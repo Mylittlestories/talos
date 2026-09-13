@@ -34,8 +34,9 @@ OUT = os.path.join(ROOT, "presentation", "index.html")
 ICON = os.path.join(ROOT, "assets", "talos.svg")
 DB = os.path.join(ROOT, "data", "lucas.db")
 
-#: Replace once, before the first push - it is used for every repo link.
+#: The canonical URLs. Change both if the project is renamed or forked.
 REPO = "https://github.com/Mylittlestories/talos"
+PAGES = "https://mylittlestories.github.io/talos/"
 
 
 # --------------------------------------------------------------------------
@@ -523,7 +524,7 @@ __RULES__
       <tr><td><b>Android</b></td><td>Nothing to sideload: open the site and
         “Add to Home Screen”. It becomes a full-screen, offline app.</td>
         <td>Python core under Pyodide</td><td>after first load</td></tr>
-      <tr><td><b>Browser</b></td><td>Nothing at all. <code>__REPO__</code> →
+      <tr><td><b>Browser</b></td><td>Nothing at all. <code>__PAGES__</code> →
         play. A service worker caches the whole studio.</td>
         <td>Python core under Pyodide</td><td>after first load</td></tr>
     </table>
@@ -798,6 +799,7 @@ def main() -> int:
     html = html.replace("__DATE__", _dt.date.today().strftime("%B %Y"))
     html = html.replace("__VERSION__", version)
     html = html.replace("__REPO__", REPO)
+    html = html.replace("__PAGES__", PAGES)
     html = html.replace("__LEVELS__", level_rows())
     html = html.replace("__RULES__", rule_items())
     html = html.replace("__NLEVELS__", str(len(DEFAULT_LEVELS)))
