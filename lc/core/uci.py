@@ -74,8 +74,9 @@ class UCIEngine:
             self.info.error = f"engine not found: {self.path}"
             raise FileNotFoundError(self.info.error)
         argv = [self.path]
-        if not os.access(self.path, os.X_OK) and self.path.endswith(".py"):
-            # a python script without the executable bit set
+        if self.path.endswith((".py", ".pyw")) and (
+                os.name == "nt"                    # Windows cannot exec a script
+                or not os.access(self.path, os.X_OK)):   # or one without +x
             argv = [sys.executable, self.path]
         try:
             self.proc = subprocess.Popen(

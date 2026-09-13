@@ -45,6 +45,20 @@ def spin(ms: int) -> None:
     loop.exec()
 
 
+def wait_until(predicate, timeout_ms: int = 15000, step_ms: int = 120) -> bool:
+    """Spin the event loop until `predicate` holds, or until time runs out.
+
+    Background analysis runs on a worker thread, so a fixed sleep makes these
+    checks a coin toss on a loaded CI machine - wait for the condition instead.
+    """
+    deadline = time.time() + timeout_ms / 1000.0
+    while time.time() < deadline:
+        if predicate():
+            return True
+        spin(step_ms)
+    return bool(predicate())
+
+
 # --------------------------------------------------------------------------
 def test_engine() -> None:
     section("Built-in engine")
@@ -141,10 +155,13 @@ def test_interface() -> None:
     window.show_hint()
     check("hint works", window.hint_level in (1, 2))
     window.toggle_analysis()
-    spin(2500)
-    check("analysis produces a line", len(window.engine_panel.lines_widget.rows) >= 1)
+    wait_until(lambda: len(window.engine_panel.lines_widget.rows) >= 1)
+    rows = len(window.engine_panel.lines_widget.rows)
+    check("analysis produces a line", rows >= 1, f"{rows} candidate lines")
     window.toggle_analysis()
-    check("evaluation recorded", len(window.eval_history) >= 1)
+    wait_until(lambda: len(window.eval_history) >= 1, 5000)
+    check("evaluation recorded", len(window.eval_history) >= 1,
+          f"{len(window.eval_history)} evaluations")
     window.takeback()
     check("takeback works", len(window.game.records) <= 1)
     return window

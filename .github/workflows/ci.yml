@@ -78,7 +78,10 @@ jobs:
       - name: The bundle must contain the app and its database
         run: |
           test -x dist/talos/talos
-          test -f dist/talos/data/lucas.db
+          # PyInstaller 6 keeps the payload beside the binary, under _internal/
+          db=$(find dist/talos -name lucas.db | head -1)
+          test -n "$db"
+          echo "database: $db ($(du -h "$db" | cut -f1))"
           du -sh dist/talos
 
   web:

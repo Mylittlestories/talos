@@ -228,6 +228,14 @@ def main() -> int:
     master.resize((512, 512), Image.LANCZOS).save(
         os.path.join(OUT, "talos.png"))
 
+    # macOS: PyInstaller refuses an .ico here and wants a real .icns
+    try:
+        master.save(os.path.join(OUT, "talos.icns"),
+                    sizes=[(16, 16), (32, 32), (64, 64), (128, 128),
+                           (256, 256), (512, 512), (1024, 1024)])
+    except Exception as exc:                              # pragma: no cover
+        print("  could not write talos.icns: " + str(exc), file=sys.stderr)
+
     # sanity: the mark must actually cover a sensible part of the plate
     alpha = master.split()[-1]
     opaque = sum(alpha.histogram()[201:])

@@ -4,8 +4,11 @@ PyInstaller spec for TALOS.
 
     pyinstaller packaging/talos.spec --noconfirm --distpath dist
 
-The result is dist/talos/ — a folder with the executable, the Lucas database
-and the icon next to it. Zip it for Windows, tar it for Linux.
+The result is dist/talos/ — the executable, plus a _internal/ folder holding
+the Python runtime, the Qt libraries, the Lucas database and the icon set.
+(PyInstaller 6 moved the payload out of the top level; everything below is
+unaffected because the app resolves its data through sys._MEIPASS.)
+Zip it for Windows, tar it for Linux.
 
 One-folder mode is deliberate: start-up is instant, and the database and the
 engines folder stay visible so users can replace or delete them.
@@ -29,7 +32,16 @@ datas = [
 if os.path.exists(os.path.join(ROOT, "engines", "README.md")):
     datas.append((os.path.join(ROOT, "engines", "README.md"), "engines"))
 
-icon = os.path.join(ROOT, "assets", "favicon.ico")
+# Each platform wants its own icon format, and PyInstaller refuses to convert:
+# a .ico on macOS is a hard error, and on Linux it is simply ignored.
+if sys.platform == "darwin":
+    icon = os.path.join(ROOT, "assets", "talos.icns")
+elif sys.platform == "win32":
+    icon = os.path.join(ROOT, "assets", "favicon.ico")
+else:
+    icon = None                          # Linux takes it from talos.desktop
+if icon is not None and not os.path.exists(icon):
+    icon = None                          # never let a missing icon break a build
 
 block_cipher = None
 
@@ -94,7 +106,7 @@ exe = EXE(  # noqa: F821
     upx=False,
     console=False,                      # a GUI app: no console window
     disable_windowed_traceback=False,
-    icon=icon if os.path.exists(icon) else None,
+    icon=icon,
     version=None,
 )
 
@@ -114,7 +126,7 @@ if sys.platform == "darwin":
     app = BUNDLE(  # noqa: F821
         coll,
         name=f"{APP_NAME}.app",
-        icon=icon if os.path.exists(icon) else None,
+        icon=icon,
         bundle_identifier="org.taloschess.studio",
         version=APP_VERSION,
     )
