@@ -83,14 +83,24 @@ main { flex: 1; padding: 16px; }
 .view.active { display: flex; flex-wrap: wrap; justify-content: center; }
 
 /* ----------------------------------------------------------------- board */
-.boardwrap { position: relative; flex: 1 1 420px; max-width: 640px; }
-.boardwrap.tall { min-height: 460px; }
+/* The board is sized from the viewport, never from its siblings: a move list
+   that grows and pushes the page into a scrollbar used to shrink the board by
+   a few pixels on almost every move, which reads as the board "breathing". */
+.boardwrap {
+  position: relative;
+  flex: 0 1 auto;
+  /* the same expression the board uses, so the rank and file labels pinned to
+     this box stay glued to the edges of the board */
+  width: min(640px, 100%, calc(100vh - 210px));
+}
+.boardwrap.tall { min-height: 460px; width: min(640px, 100%); }
 
 .board {
   display: grid;
   grid-template-columns: repeat(8, 1fr);
   aspect-ratio: 1;
-  width: 100%;
+  width: min(100%, calc(100vh - 210px));
+  margin: 0 auto;
   border-radius: var(--radius);
   overflow: hidden;
   box-shadow: var(--shadow);
@@ -219,7 +229,8 @@ main { flex: 1; padding: 16px; }
   font-size: 12.5px;
   font-weight: 600;
 }
-.status-text { margin-top: 8px; font-size: 14px; min-height: 21px; }
+.status-text { margin-top: 8px; font-size: 14px; min-height: 42px; }
+/* two lines of room: a status that wraps must not resize the layout */
 .material { display: flex; gap: 14px; margin-top: 8px; font-size: 13px; }
 .material span { display: flex; align-items: center; gap: 6px; }
 .material i { width: 11px; height: 11px; border-radius: 3px; display: block; }
@@ -373,6 +384,8 @@ button.primary:hover { filter: brightness(1.08); color: #1a1305; }
   .tabs { width: 100%; margin-left: 0; order: 3; }
   .brand-text span { display: none; }
   .movelist { grid-template-columns: repeat(2, 1fr); }
+  .board, .boardwrap { width: 100%; }
+  .boardwrap.tall { min-height: 380px; }
   #an-canvas { height: 380px; }
 }
 

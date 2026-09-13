@@ -16,6 +16,33 @@ Nothing yet.
 
 ---
 
+## [2.0.1] — Fixes
+
+Three fixes, all from hands-on play rather than from theory.
+
+### Fixed
+
+- **The board no longer breathes.** In the browser edition the board was sized
+  by its neighbours in the flex row, so a growing move list, a status line
+  that wrapped onto two lines, or a scrollbar appearing could resize the board
+  by a few pixels on almost every move. The size now comes only from the
+  viewport (`min(640px, 100%, 100vh - 210px)`), and the status line reserves
+  the two lines it may need, so the board is the same square on every move.
+- **Battle Chess no longer takes the application down with it.** An error
+  while drawing the 3D board used to repeat at sixty frames a second, which
+  buried the window under error dialogs until it stopped responding. A
+  drawing error is now caught once: the animation loop stops, the window
+  returns to the flat board, and a single dialog explains what happened. Every
+  other feature carries on.
+- **Anarchess is no longer dark.** The land is unbounded, so most of the
+  canvas is board that simply has no tile on it yet — but it was painted flat
+  black, which read as fog of war. Two changes: the land now scales to fit the
+  window, so it stays whole however far it spreads (instead of running off the
+  edge), and the empty squares are drawn as a faint grid, so it is obvious
+  where a tile can still be placed. Both the desktop and the browser board.
+
+---
+
 ## [2.0.0] — TALOS
 
 The release that gives the project its name. TALOS — *The Living Chess

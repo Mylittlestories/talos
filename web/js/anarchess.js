@@ -230,6 +230,23 @@ export class AnarchessView {
     const py = (y) => this.oy + y * cell;
     const pad = Math.max(1, cell * 0.05);
 
+    // The empty land, drawn faintly. The land is unbounded, so the dark part
+    // of the canvas is not "off the board" - it is somewhere a tile can still
+    // go. Without this the view reads as fog rather than as a board.
+    const filled = new Set(this.state.tiles.map((t) => t[0] + "," + t[1]));
+    const growX = Math.ceil((w / cell - cols) / 2) + 1;
+    const growY = Math.ceil((h / cell - rows) / 2) + 1;
+    ctx.strokeStyle = "rgba(86, 95, 116, 0.30)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let gx = b.minX - growX; gx <= b.maxX + growX; gx += 1) {
+      for (let gy = b.minY - growY; gy <= b.maxY + growY; gy += 1) {
+        if (filled.has(gx + "," + gy)) continue;
+        ctx.rect(px(gx) + pad, py(gy) + pad, cell - pad * 2, cell - pad * 2);
+      }
+    }
+    ctx.stroke();
+
     // the land
     for (const tile of this.state.tiles) {
       ctx.fillStyle = tile[2] ? LIGHT_TILE : DARK_TILE;

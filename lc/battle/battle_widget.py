@@ -161,6 +161,8 @@ class Walk:
 
 class BattleBoardWidget(QOpenGLWidget):
     moveRequested = pyqtSignal(object)
+    #: Emitted once, the first time drawing fails, with the reason.
+    glFailed = pyqtSignal(str)
 
     # distances are tuned for a 42 degree vertical field of view: the whole
     # board (9.1 units including the frame) has to fit with a small margin
@@ -345,7 +347,12 @@ class BattleBoardWidget(QOpenGLWidget):
 
     # -- animation ---------------------------------------------------------
     def _tick(self) -> None:
-        dt = 0.016
+        try:
+            self._step(0.016)
+        except Exception as exc:                            # pragma: no cover
+            self._gl_fail(exc)
+
+    def _step(self, dt: float) -> None:
         self.time += dt
         self.yaw += (self.target_yaw - self.yaw) * 0.08
         self.pitch += (self.target_pitch - self.pitch) * 0.08
@@ -687,12 +694,38 @@ class BattleBoardWidget(QOpenGLWidget):
         return lst
 
     def resizeGL(self, w: int, h: int) -> None:  # noqa: N802
-        GL.glViewport(0, 0, max(1, w), max(1, h))
+        try:
+            GL.glViewport(0, 0, max(1, w), max(1, h))
+        except Exception as exc:                            # pragma: no cover
+            self._gl_fail(exc)
+
+    def _gl_fail(self, exc: BaseException) -> None:
+        """Stop trying to draw, and tell the window to fall back to 2D."""
+        import traceback
+
+        self._ready = False
+        self._gl_error = "".join(
+            traceback.format_exception(type(exc), exc, exc.__traceback__))
+        try:
+            self.timer.stop()
+        except Exception:
+            pass
+        self.glFailed.emit(self._gl_error)
 
     def paintGL(self) -> None:  # noqa: N802
         if not self._ready:
             self._paint_fallback_text()
             return
+        try:
+            self._paint_scene()
+        except Exception as exc:                            # pragma: no cover
+            # An unguarded exception here fires once per frame: at 60 fps that
+            # is sixty error dialogs a second, which is what "battle mode
+            # crashes" looks like from the outside. Fail once, say why, stop.
+            self._gl_fail(exc)
+            self._paint_fallback_text()
+
+    def _paint_scene(self) -> None:
         w, h = self.width(), self.height()
         GL.glClear(GL.GL_COLOR_BUFFER_BIT | GL.GL_DEPTH_BUFFER_BIT)
         GL.glMatrixMode(GL.GL_PROJECTION)

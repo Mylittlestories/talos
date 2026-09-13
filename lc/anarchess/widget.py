@@ -44,7 +44,11 @@ class AnarchessCanvas(QWidget):
     hoverChanged = pyqtSignal(object)          # Optional[(x, y)]
     statusTip = pyqtSignal(str)
 
-    def __init__(self, game: AnarchessGame, cell: int = 58, parent=None):
+    #: Largest cell we are willing to draw. The land scales up to it, so a
+    #: small land fills the window instead of floating in the void.
+    MAX_CELL = 96
+
+    def __init__(self, game: AnarchessGame, cell: int = 96, parent=None):
         super().__init__(parent)
         self.game = game
         self.cell_size = cell
@@ -75,23 +79,77 @@ class AnarchessCanvas(QWidget):
         self.selected_colour = colour
         self.update()
 
-    def _origin(self) -> Tuple[float, float]:
+    #: An almost empty land still reads as a board rather than as a speck.
+    MIN_EXTENT = 8
+
+    def _grid(self) -> Tuple[int, int]:
+        """Columns and rows the view must show, margins included."""
         x0, x1, y0, y1 = self.game.bounds()
-        width = (x1 - x0 + 1 + 2 * self.margin) * self.cell_size
-        height = (y1 - y0 + 1 + 2 * self.margin) * self.cell_size
-        ox = (self.width() - width) / 2.0
-        oy = (self.height() - height) / 2.0
-        return ox + (self.margin - x0) * self.cell_size, \
-            oy + (y1 + self.margin) * self.cell_size
+        cols = (x1 - x0 + 1) + 2 * self.margin
+        rows = (y1 - y0 + 1) + 2 * self.margin
+        return max(cols, self.MIN_EXTENT), max(rows, self.MIN_EXTENT)
+
+    def visible_range(self) -> Tuple[int, int, int, int]:
+        """The cell window on show: the land, then as much empty board as the
+        widget can hold.
+
+        The land is unbounded, so the empty part of the window is not "off the
+        board" - it is somewhere a tile could still go. Drawing it (and
+        clipping it to the widget) is what stops the view looking like fog.
+        """
+        x0, x1, y0, y1 = self.game.bounds()
+        cols, rows = self._grid()
+        nat_cols = (x1 - x0 + 1) + 2 * self.margin
+        nat_rows = (y1 - y0 + 1) + 2 * self.margin
+        pad_x = (cols - nat_cols) // 2
+        pad_y = (rows - nat_rows) // 2
+        left = x0 - self.margin - pad_x
+        right = left + cols - 1
+        bottom = y0 - self.margin - pad_y
+        top = bottom + rows - 1
+        cell = self.fit_cell()
+        if cell > 0:
+            grow_x = int(self.width() / cell - cols) // 2 + 1
+            grow_y = int(self.height() / cell - rows) // 2 + 1
+            left -= grow_x
+            right += grow_x
+            bottom -= grow_y
+            top += grow_y
+        return left, right, bottom, top
+
+    def fit_cell(self) -> int:
+        """Cell size that keeps the whole land on screen.
+
+        The canvas sits in a scroll area with ``widgetResizable`` set, so Qt
+        forces it to the viewport size and ignores its size hint. With a fixed
+        cell size the land was therefore clipped as soon as it outgrew the
+        window and there were no scrollbars to reach the missing part - the
+        board looked like a fog of war. Scale the land to fit instead; the
+        wheel sets the largest size we are willing to draw.
+        """
+        cols, rows = self._grid()
+        avail_w = max(160, self.width() - 34)
+        avail_h = max(160, self.height() - 34)
+        return max(10, min(self.cell_size, self.MAX_CELL,
+                           int(min(avail_w / cols, avail_h / rows))))
+
+    def _origin(self) -> Tuple[float, float]:
+        left, right, bottom, top = self.visible_range()
+        s = self.fit_cell()
+        # centre the *drawn window* (which is wider than the land), so the
+        # empty board runs off every edge instead of piling up on one side
+        ox = (self.width() - (right - left + 1) * s) / 2.0
+        oy = (self.height() - (top - bottom + 1) * s) / 2.0
+        return ox - left * s, oy + (top + 1) * s
 
     def rect_for(self, cellx: int, celly: int) -> QRectF:
         ox, oy = self._origin()
-        s = self.cell_size
+        s = self.fit_cell()
         return QRectF(ox + cellx * s, oy - (celly + 1) * s, s, s)
 
     def cell_at(self, pos: QPoint) -> Optional[Tuple[int, int]]:
         ox, oy = self._origin()
-        s = self.cell_size
+        s = self.fit_cell()
         cx = int((pos.x() - ox) // s)
         cy = int((oy - pos.y()) // s)
         return (cx, cy)
@@ -119,7 +177,18 @@ class AnarchessCanvas(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         painter.fillRect(self.rect(), VOID)
-        s = self.cell_size
+        s = self.fit_cell()
+
+        # ---- the empty land, drawn as a grid
+        # Without it the unexplored part of an unbounded board is just black,
+        # which reads as fog rather than as somewhere you could lay a tile.
+        left, right, bottom, top = self.visible_range()
+        painter.setPen(QPen(QColor(86, 95, 116, 105), 1))
+        for cx in range(left, right + 1):
+            for cy in range(bottom, top + 1):
+                if (cx, cy) in game.tiles:
+                    continue
+                painter.drawRect(self.rect_for(cx, cy).adjusted(1, 1, -1, -1))
 
         # ---- area ownership tint
         if self.show_areas:
@@ -216,10 +285,9 @@ class AnarchessCanvas(QWidget):
         painter.end()
 
     def sizeHint(self):  # noqa: N802
-        x0, x1, y0, y1 = self.game.bounds()
-        w = (x1 - x0 + 1 + 2 * self.margin) * self.cell_size + 30
-        h = (y1 - y0 + 1 + 2 * self.margin) * self.cell_size + 30
-        return self.minimumSize().expandedTo(QSize(w, h))
+        cols, rows = self._grid()
+        s = self.fit_cell()
+        return self.minimumSize().expandedTo(QSize(cols * s + 30, rows * s + 30))
 
     # ------------------------------------------------------------------
     # input
@@ -245,7 +313,8 @@ class AnarchessCanvas(QWidget):
     def wheelEvent(self, event) -> None:  # noqa: N802
         delta = event.angleDelta().y()
         if delta:
-            self.cell_size = max(22, min(96, self.cell_size + (6 if delta > 0 else -6)))
+            self.cell_size = max(22, min(self.MAX_CELL,
+                                         self.cell_size + (6 if delta > 0 else -6)))
             self._refresh()
 
 
@@ -263,4 +332,4 @@ class AnarchessBoard(QScrollArea):
     def centre_on(self, cellx: int, celly: int) -> None:
         rect = self.canvas.rect_for(cellx, celly)
         self.ensureVisible(int(rect.center().x()), int(rect.center().y()),
-                           self.canvas.cell_size, self.canvas.cell_size)
+                           self.canvas.fit_cell(), self.canvas.fit_cell())

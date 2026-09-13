@@ -1285,11 +1285,28 @@ class MainWindow(QMainWindow):
         try:
             self.battle_widget = BattleBoardWidget(self, self.settings)
             self.battle_widget.moveRequested.connect(self.on_human_move)
+            self.battle_widget.glFailed.connect(self._battle_failed)
             self.stack.addWidget(self.battle_widget)
         except Exception as exc:
             self.battle_widget = None
             QMessageBox.warning(self, "Battle Chess",
                                 f"3D acceleration unavailable: {exc}")
+
+    def _battle_failed(self, detail: str) -> None:
+        """The 3D board stopped drawing: go back to the 2D board, once.
+
+        Drawing errors used to repeat every frame, which buried the window in
+        error dialogs. Report the first one and carry on in 2D.
+        """
+        self.battle_action.setChecked(False)
+        self.stack.setCurrentWidget(self.board)
+        self.status_label.setText("Battle Chess off - 3D drawing failed")
+        tail = (detail or "unknown error").strip().splitlines()
+        QMessageBox.warning(
+            self, "Battle Chess",
+            "The 3D board stopped drawing, so the game switched back to the\n"
+            "flat board. Every other feature is unaffected.\n\n"
+            + "\n".join(tail[-6:]))
 
     def set_gore(self, level: str) -> None:
         self.settings["battle_gore"] = level
