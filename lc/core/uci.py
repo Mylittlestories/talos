@@ -431,6 +431,26 @@ ENGINE_NAMES = ("stockfish", "stockfish_15_x64_avx2", "stockfish_16_x64_avx2",
                 "brainfish", "asmfish", "ethereal", "demolito")
 
 
+#: Files that live in engines/ but are not engines.
+_DOC_SUFFIXES = (".md", ".txt", ".rst", ".json", ".yml", ".yaml", ".ini", ".cfg")
+_WINDOWS_EXECUTABLE_SUFFIXES = (".exe", ".bat", ".cmd", ".com", ".py")
+
+
+def can_execute(path: str) -> bool:
+    """Would this platform actually run the file?
+
+    On Windows there is no execute bit and ``os.access(X_OK)`` is happy with a
+    text file, which is how ``engines/README.md`` ended up being offered to the
+    UCI client as an engine. Require a real executable suffix there.
+    """
+    name = os.path.basename(path).lower()
+    if name.startswith("readme") or name.endswith(_DOC_SUFFIXES):
+        return False
+    if os.name == "nt":
+        return name.endswith(_WINDOWS_EXECUTABLE_SUFFIXES)
+    return os.access(path, os.X_OK)
+
+
 def find_engines(extra_dirs: Optional[List[str]] = None) -> List[str]:
     """Look for UCI binaries in PATH and in the usual project folders."""
     found: List[str] = []
@@ -442,7 +462,7 @@ def find_engines(extra_dirs: Optional[List[str]] = None) -> List[str]:
         if os.path.isdir(d):
             for entry in sorted(os.listdir(d)):
                 full = os.path.join(d, entry)
-                if os.path.isfile(full) and os.access(full, os.X_OK):
+                if os.path.isfile(full) and can_execute(full):
                     found.append(full)
     for name in ENGINE_NAMES:
         p = shutil.which(name)

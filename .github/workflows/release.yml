@@ -164,6 +164,7 @@ jobs:
           name: TALOS ${{ github.ref_name }}
           body_path: notes.md
           draft: true
+          # artifacts/* already contains SHA256SUMS.txt - listing it a second
+          # time makes the action re-upload it and fail on the asset update.
           files: |
             artifacts/*
-            artifacts/SHA256SUMS.txt

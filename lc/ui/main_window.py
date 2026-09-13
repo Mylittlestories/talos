@@ -890,11 +890,17 @@ class MainWindow(QMainWindow):
 
     def _analysis_player(self) -> Optional[Player]:
         if self.analysis_player is None:
-            paths = self.engines or find_engines()
-            if paths:
-                self.analysis_player = UCIPlayer(paths[0], limit_ms=1200)
-            else:
-                self.analysis_player = BuiltInPlayer(DEFAULT_LEVELS[9], "Balanced")
+            player: Optional[Player] = None
+            for path in self.engines or find_engines():
+                try:
+                    candidate = UCIPlayer(path, limit_ms=1200)
+                    candidate.start()
+                    player = candidate
+                    break
+                except Exception:
+                    continue      # one broken engine must not disable analysis
+            self.analysis_player = player or BuiltInPlayer(
+                DEFAULT_LEVELS[9], "Balanced")
         return self.analysis_player
 
     def _on_analysis_result(self, result) -> None:

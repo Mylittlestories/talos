@@ -140,6 +140,7 @@ def test_interface() -> None:
     section("Interface")
     from lc.ui.main_window import MainWindow
     from lc.core.players import BuiltInPlayer, HumanPlayer
+    from lc.core.engine import DEFAULT_LEVELS
 
     window = MainWindow()
     window.settings["show_result_dialog"] = False
@@ -154,6 +155,10 @@ def test_interface() -> None:
           [r.san for r in window.game.records])
     window.show_hint()
     check("hint works", window.hint_level in (1, 2))
+    # Pin the analysis engine. _analysis_player() otherwise asks the machine
+    # what is installed, which makes the check depend on the runner - and a
+    # stray file in engines/ silently turns analysis into a no-op.
+    window.analysis_player = BuiltInPlayer(DEFAULT_LEVELS[9], "Balanced")
     window.toggle_analysis()
     wait_until(lambda: len(window.engine_panel.lines_widget.rows) >= 1)
     rows = len(window.engine_panel.lines_widget.rows)
