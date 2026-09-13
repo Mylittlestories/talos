@@ -1260,8 +1260,7 @@ class MainWindow(QMainWindow):
     def toggle_battle(self, *_args) -> None:
         enabled = self.battle_action.isChecked()
         if enabled:
-            self._ensure_battle()
-            if self.battle_widget is None:
+            if not self._ensure_battle():
                 self.battle_action.setChecked(False)
                 return
             self.stack.setCurrentWidget(self.battle_widget)
@@ -1270,9 +1269,30 @@ class MainWindow(QMainWindow):
             self.stack.setCurrentWidget(self.board)
         self.status_label.setText("Battle Chess mode " + ("on" if enabled else "off"))
 
-    def _ensure_battle(self) -> None:
+    @staticmethod
+    def _gl_available() -> bool:
+        """Can this machine create an OpenGL context at all?
+
+        On machines with no working driver Qt simply prints 'Failed to create
+        context' and leaves the 3D widget blank, which reads as a hang rather
+        than as an error. Asking first turns that into a plain message.
+        """
+        try:
+            from PyQt6.QtGui import QOpenGLContext
+            ctx = QOpenGLContext()
+            return bool(ctx.create())
+        except Exception:
+            return False
+
+    def _ensure_battle(self) -> bool:
         if self.battle_widget is not None:
-            return
+            return True
+        if not self._gl_available():
+            QMessageBox.warning(
+                self, "Battle Chess",
+                "This machine could not create an OpenGL context, so the 3D\n"
+                "board cannot run. The flat board keeps every game feature.")
+            return False
         try:
             from ..battle.battle_widget import BattleBoardWidget
         except Exception as exc:
@@ -1291,20 +1311,48 @@ class MainWindow(QMainWindow):
             self.battle_widget = None
             QMessageBox.warning(self, "Battle Chess",
                                 f"3D acceleration unavailable: {exc}")
+            return False
+        # Give the 3D view a couple of seconds to prove it can draw. If no
+        # frame arrives - a bad driver, a lost context, a blank widget - drop
+        # back to the flat board instead of sitting there doing nothing.
+        self._battle_watchdog = QTimer(self)
+        self._battle_watchdog.setSingleShot(True)
+        self._battle_watchdog.timeout.connect(self._battle_watchdog_check)
+        self._battle_watchdog.start(2500)
+        return True
+
+    def _battle_watchdog_check(self) -> None:
+        widget = self.battle_widget
+        if widget is None or not self.battle_action.isChecked():
+            return
+        if getattr(widget, "_painted", False):
+            return                       # it is drawing: leave it alone
+        self._battle_failed(
+            "The 3D view never drew a frame.\n"
+            "Qt could not create an OpenGL context on this machine.")
 
     def _battle_failed(self, detail: str) -> None:
         """The 3D board stopped drawing: go back to the 2D board, once.
 
         Drawing errors used to repeat every frame, which buried the window in
-        error dialogs. Report the first one and carry on in 2D.
+        error dialogs. The switch is deferred to the next turn of the event
+        loop because this arrives from inside a paint event, where changing
+        the visible widget is not safe.
         """
+        if getattr(self, "_battle_reported", False):
+            return
+        self._battle_reported = True
+        QTimer.singleShot(0, lambda: self._battle_fallback(detail))
+
+    def _battle_fallback(self, detail: str) -> None:
         self.battle_action.setChecked(False)
         self.stack.setCurrentWidget(self.board)
         self.status_label.setText("Battle Chess off - 3D drawing failed")
-        tail = (detail or "unknown error").strip().splitlines()
+        tail = [line for line in (detail or "unknown error").strip().splitlines()
+                if line.strip()]
         QMessageBox.warning(
             self, "Battle Chess",
-            "The 3D board stopped drawing, so the game switched back to the\n"
+            "The 3D board could not draw, so the game switched back to the\n"
             "flat board. Every other feature is unaffected.\n\n"
             + "\n".join(tail[-6:]))
 

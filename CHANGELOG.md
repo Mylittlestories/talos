@@ -28,12 +28,17 @@ Three fixes, all from hands-on play rather than from theory.
   by a few pixels on almost every move. The size now comes only from the
   viewport (`min(640px, 100%, 100vh - 210px)`), and the status line reserves
   the two lines it may need, so the board is the same square on every move.
-- **Battle Chess no longer takes the application down with it.** An error
-  while drawing the 3D board used to repeat at sixty frames a second, which
-  buried the window under error dialogs until it stopped responding. A
-  drawing error is now caught once: the animation loop stops, the window
-  returns to the flat board, and a single dialog explains what happened. Every
-  other feature carries on.
+- **Battle Chess no longer takes the application down with it.** It used to
+  die the moment the mode was switched on: an error while drawing the 3D
+  board repeated at sixty frames a second, which buried the window under
+  error dialogs, and on machines without a working OpenGL driver Qt simply
+  left a blank panel where the board should be. Three things now stand
+  between that and the player. The mode asks whether a GL context can be
+  created *before* it switches, and says so plainly if not. A drawing error
+  is caught once: the animation loop stops, the window returns to the flat
+  board, and a single dialog carries the traceback. And if no frame has
+  arrived after a couple of seconds, a watchdog pulls the game back to the
+  flat board. Every other feature carries on either way.
 - **Anarchess is no longer dark.** The land is unbounded, so most of the
   canvas is board that simply has no tile on it yet — but it was painted flat
   black, which read as fog of war. Two changes: the land now scales to fit the

@@ -208,6 +208,7 @@ class BattleBoardWidget(QOpenGLWidget):
         self.time = 0.0
         self._lists: Dict[str, int] = {}
         self._ready = False
+        self._painted = False        # flips true on the first good frame
         self._orbiting = False
         self._last_pos = None
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
@@ -661,8 +662,9 @@ class BattleBoardWidget(QOpenGLWidget):
             self._build_lists()
             self._ready = True
         except Exception as exc:                            # pragma: no cover
-            self._ready = False
-            self._gl_error = str(exc)
+            # No usable context or no usable lists: report it once, let the
+            # window fall back to the flat board, and stop trying to draw.
+            self._gl_fail(exc)
 
     def _build_lists(self) -> None:
         for key, lst in self._lists.items():
@@ -718,6 +720,7 @@ class BattleBoardWidget(QOpenGLWidget):
             return
         try:
             self._paint_scene()
+            self._painted = True
         except Exception as exc:                            # pragma: no cover
             # An unguarded exception here fires once per frame: at 60 fps that
             # is sixty error dialogs a second, which is what "battle mode
