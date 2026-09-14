@@ -16,6 +16,81 @@ Nothing yet.
 
 ---
 
+## [2.1.0] — The land before Chess, and thirty ways to die
+
+Anarchess stopped being a reconstruction, and Battle Chess learned to walk.
+
+### Added
+
+- **Anarchess is played from the designer's own rulebook.** The version in the
+  repository had been pieced together from a summary, and every open question
+  in it had been answered with a switch. The published rules replace it: the
+  opening is four tiles with the two light ones diagonal, the die names the
+  colour and the *other* tribe lays it, a tile touching only one other must be
+  of the opposite colour, attacks land on the diagonal with no support needed,
+  a pawn may only be settled onto the tile just laid, and the scoring is two
+  points a tile — three where the area matches its owner's colour or is held
+  by a lone pawn, but only one in the largest area, which is taxed. A single
+  tile scores nothing and a pawn left in the reserve costs six.
+- **Anarchess SOLO and Anarcheckers**, the two further variants from the same
+  author, now play. SOLO is one player against a target of 192, playing both
+  tribes, with the pawn action forced in a fixed order. Anarcheckers steps and
+  captures on the diagonals, with captures forced and chains that must be
+  followed through.
+- **Thirty duels.** The 1988 original gave every capture its own animation —
+  "a different animation for each permutation" — and so does this now. Six
+  pieces can take, five can be taken, and each of the thirty pairs has its own
+  name, its own way of striking, its own death, its own length and its own
+  mess. A knight taking a knight cuts his enemy limb from limb; a knight
+  facing the queen dodges her magic and turns it against her.
+- **Six ways to walk.** Each rank crosses the board differently: the knight
+  leaves the ground altogether, the rook takes two enormous paces and thuds on
+  each, the bishop never quite touches the floor, the pawn hurries with his
+  head down, the queen struts and the king waddles. Longer moves take longer,
+  but not proportionally.
+- `python tools/app_smoke.py` builds the real window and plays Anarchess in
+  all three of its modes. Twenty checks on the wiring rather than the parts.
+
+### Changed
+
+- **The Anarchess dialog is rebuilt.** Four switches that described the old
+  reconstruction are gone; in their place are the variant, the size of the
+  land, and the rulebook's own dials — the tax on the largest area, the colour
+  bonus, and what a pawn left in reserve costs.
+- **The board shows what things are worth.** Areas are outlined rather than
+  tinted, the taxed largest area wears a broken outline, and each is labelled
+  with what it currently scores. The tile just laid is ringed: it is the only
+  place a pawn may be settled.
+- The presentation deck described the reconstruction. It describes the
+  published game now, and names the walks and the duels.
+
+### Fixed
+
+- **The bot was paid to lose.** Its evaluation rewarded keeping pawns in the
+  reserve, which the published scoring charges six points for. It now follows
+  the rulebook's arithmetic.
+- **The strongest level was losing to the weakest.** Level 3's opponent model
+  measured its own loss, which barely differs between candidate tiles. It
+  measures the opponent's gain now: level 3 beats level 1 five games in six,
+  and the ladder is ordered throughout.
+- **The browser edition could not settle a pawn at all.** Each snapshot
+  dropped the tile just laid, and settling is only ever onto that tile, so the
+  reserve could never be spent. The snapshot also carried rule fields that no
+  longer exist, which crashed every snapshot outright, and offered two
+  triangles per cell to pick a colour the die had already chosen, so every
+  tile click was rejected.
+- **A solo player with no pawn action available had no legal move**, which
+  stopped the game dead. The action is forced only when one exists.
+- **Two deaths could never finish dying.** Flattening and melting shrank the
+  piece by subtracting from a value they had just overwritten, so the victim
+  was still standing when the turn ended and got cut off mid-animation. The
+  turn now waits for it, as the original did.
+- **"engine sees mate in one" failed about one run in ten.** Not the search:
+  it asked the Club level, which is built to play a worse move 8% of the time.
+  It asks Master+ now, which blunders never.
+
+---
+
 ## [2.0.3] — The name on the box
 
 An audit of what the project claims about itself, prompted by a screenshot of
