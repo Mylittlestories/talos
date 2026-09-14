@@ -25,6 +25,7 @@ from PyQt6.QtOpenGLWidgets import QOpenGLWidget
 from PyQt6.QtWidgets import QWidget
 
 from . import duels as dueltable
+from . import gaits as gaittable
 from . import meshes
 from .physics import PhysicsWorld
 
@@ -164,6 +165,8 @@ class Walk:
     hop: float = 0.55
     promotion: Optional[int] = None
     finished: bool = False
+    #: how this piece walks - see lc/battle/gaits.py
+    gait: Optional[object] = None
 
 
 # --------------------------------------------------------------------------
@@ -312,12 +315,15 @@ class BattleBoardWidget(QOpenGLWidget):
             self.fights.append(fight)
         else:
             tx, tz = square_to_xz(move.to_square, self.flipped)
+            gait = gaittable.gait_for(piece)
             walk = Walk(piece_ref=attacker, from_x=attacker.x, from_z=attacker.z,
                         to_x=tx, to_z=tz,
                         to_square=move.to_square, move=move,
                         promotion=move.promotion,
-                        hop=1.15 if piece.piece_type == chess.KNIGHT else 0.28,
-                        duration=0.52 if piece.piece_type == chess.KNIGHT else 0.40)
+                        hop=gait.hop,
+                        duration=gaittable.move_duration(
+                            gait, move.from_square, move.to_square),
+                        gait=gait)
             self.walks.append(walk)
         self.board = board_from_fen(record.fen_after)
         # castling also moves the rook
@@ -329,10 +335,13 @@ class BattleBoardWidget(QOpenGLWidget):
             rook = self.pieces.pop(rook_from, None)
             if rook is not None and rook_from in chess.SQUARES:
                 rx, rz = square_to_xz(rook_to, self.flipped)
+                gait = gaittable.gait_for(chess.Piece(chess.ROOK, not self.flipped))
                 walk = Walk(piece_ref=rook, from_x=rook.x, from_z=rook.z,
                             to_x=rx, to_z=rz,
                             to_square=rook_to, move=chess.Move(rook_from, rook_to),
-                            hop=0.2, duration=0.6)
+                            hop=gait.hop,
+                            duration=gaittable.move_duration(gait, rook_from, rook_to),
+                            gait=gait)
                 self.walks.append(walk)
         self.update()
 
@@ -372,13 +381,44 @@ class BattleBoardWidget(QOpenGLWidget):
             progress = min(1.0, walk.t / walk.duration)
             eased = progress * progress * (3 - 2 * progress)
             ref = walk.piece_ref
+            gait = walk.gait or gaittable.DEFAULT_GAIT
             ref.x = walk.from_x + (walk.to_x - walk.from_x) * eased
             ref.z = walk.from_z + (walk.to_z - walk.from_z) * eased
-            ref.y = math.sin(math.pi * progress) * walk.hop * 0.35
-            ref.yaw = math.sin(progress * math.tau) * 0.12
+            # ---- the walk itself: each rank crosses the board in its own way
+            if gait.steps > 1:
+                # paces: a bounce per step, so a rook takes two enormous
+                # strides and a pawn hurries along in four little ones
+                pace = math.sin(progress * math.pi * gait.steps)
+                ref.y = abs(pace) * gait.bob
+                ref.roll = pace * gait.sway
+            else:
+                # one arc, for the things that glide or leap
+                ref.y = math.sin(math.pi * progress) * walk.hop * 0.35
+                ref.roll = math.sin(math.pi * progress) * gait.sway
+            ref.pitch = gait.lean * math.sin(math.pi * progress)
+            if gait.face:
+                heading = math.atan2(walk.to_z - walk.from_z,
+                                     walk.to_x - walk.from_x)
+                ref.yaw = heading + math.sin(progress * math.pi * gait.steps
+                                             * 2) * gait.wobble
+            else:
+                ref.yaw = math.sin(progress * math.tau * gait.steps) * gait.wobble
             if progress >= 1.0:
                 ref.y = 0.0
                 ref.yaw = 0.0
+                ref.roll = 0.0
+                ref.pitch = 0.0
+                if gait.landing == "dust":
+                    self.physics.burst([walk.to_x, 0.06, walk.to_z],
+                                       (0.74, 0.70, 0.62),
+                                       count=8, power=0.5, spread=1.4)
+                elif gait.landing == "thud":
+                    self.physics.burst([walk.to_x, 0.05, walk.to_z],
+                                       (0.70, 0.66, 0.58),
+                                       count=12, power=0.8, spread=1.2)
+                    self.shake = max(self.shake, 0.22)
+                if gait.landing:
+                    self._sound(gait.sound)
                 if walk.promotion:
                     ref.piece = chess.Piece(walk.promotion, ref.piece.color)
                     head = [walk.to_x, 0.8, walk.to_z]

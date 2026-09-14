@@ -396,6 +396,61 @@ def test_battle() -> None:
     check("captures last about as long as the original's",
           1.0 <= fastest and slow <= 2.6, f"{fastest:.2f}s to {slow:.2f}s")
 
+    # ---- every piece walks in its own way ----
+    from lc.battle import gaits as gaittable
+    check("every piece has a gait",
+          len(gaittable.all_gaits()) == 6 and
+          all(gaittable.gait_for(pt).key for pt in attackers),
+          ", ".join(g.key for g in gaittable.all_gaits()))
+
+    # one quiet move per piece, watched from the moment it leaves
+    def walk_of(piece_type: int, fen: str, uci: str):
+        board = chess.Board(fen)
+        widget.sync_position(board)
+        move = chess.Move.from_uci(uci)
+        ref = widget.pieces[move.from_square]
+        record = _Rec()
+        record.move = move
+        record.fen_before = board.fen()
+        record.capture = None
+        record.captured_square = None
+        record.is_en_passant = record.is_castle = record.is_promotion = False
+        board.push(move)
+        record.fen_after = board.fen()
+        widget.play_move(record)
+        gait = widget.walks[0].gait
+        peak = sway = 0.0
+        frames = 0
+        while (widget.walks or widget.fights) and frames < 400:
+            widget._tick()
+            peak = max(peak, ref.y)
+            sway = max(sway, abs(ref.roll))
+            frames += 1
+        tx, tz = square_to_xz(move.to_square, widget.flipped)
+        home = (abs(ref.x - tx) < 1e-6 and abs(ref.z - tz) < 1e-6
+                and abs(ref.y) < 1e-6)
+        return gait, frames / 60, peak, sway, home
+
+    WALKS = (
+        (chess.PAWN,   "4k3/8/8/8/8/8/4P3/4K3 w - - 0 1", "e2e4"),
+        (chess.KNIGHT, "4k3/8/8/8/8/8/8/1N2K3 w - - 0 1", "b1c3"),
+        (chess.BISHOP, "4k3/8/8/8/8/8/8/2B1K3 w - - 0 1", "c1g5"),
+        (chess.ROOK,   "4k3/8/8/8/8/8/8/R3K3 w - - 0 1", "a1a4"),
+        (chess.QUEEN,  "4k3/8/8/8/8/8/8/3QK3 w - - 0 1", "d1d5"),
+        (chess.KING,   "4k3/8/8/8/8/8/8/4K3 w - - 0 1", "e1e2"),
+    )
+    walked = [walk_of(*row) for row in WALKS]
+    arrived = sum(1 for w in walked if w[4])
+    check("every piece walks to its square", arrived == len(WALKS),
+          f"{arrived} of {len(WALKS)} arrived")
+    peaks = {w[0].key: w[2] for w in walked}
+    check("the knight leaves the ground and the bishop does not",
+          peaks["leap"] > peaks["glide"] * 3,
+          f"knight {peaks['leap']:.2f} against bishop {peaks['glide']:.2f}")
+    check("no two pieces walk alike",
+          len({round(w[2], 3) for w in walked}) == len(walked),
+          "each gait peaks at its own height")
+
 
 def test_anarchy() -> None:
     section("Anarchchess (the house rules)")
