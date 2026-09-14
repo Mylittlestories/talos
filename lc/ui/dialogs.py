@@ -349,15 +349,24 @@ class PreferencesDialog(QDialog):
         form.addRow("Promote to queen automatically", self.auto_queen)
         form.addRow("Save games automatically", self.auto_save)
         form.addRow("Show evaluation", self.show_eval)
+        self.duels_button = QPushButton("The thirty duels…")
+        self.duels_button.setToolTip(
+            "Every capture is its own animation: one for each permutation of "
+            "attacker and victim, as in the 1988 original.")
+        self.duels_button.clicked.connect(self._show_duels)
         form.addRow("Battle quality", self.battle_quality)
         form.addRow("Battle camera", self.battle_camera)
         form.addRow("", self.battle_on_capture)
+        form.addRow("Captures", self.duels_button)
         layout.addLayout(form)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok |
                                    QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+
+    def _show_duels(self) -> None:
+        DuelsDialog(self).exec()
 
     def settings(self) -> Dict:
         return {
@@ -375,6 +384,43 @@ class PreferencesDialog(QDialog):
             "battle_quality": self.battle_quality.currentText(),
             "battle_camera": self.battle_camera.currentText(),
         }
+
+
+# --------------------------------------------------------------------------
+# the thirty duels
+# --------------------------------------------------------------------------
+
+class DuelsDialog(QDialog):
+    """Every capture animation in the game, as the 1988 original had them.
+
+    One entry per permutation of attacker and victim - thirty in all - so
+    this is also the checklist for "a different animation for each".
+    """
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("The thirty duels")
+        self.resize(620, 520)
+        layout = QVBoxLayout(self)
+        layout.addWidget(QLabel(
+            "<b>Thirty duels.</b> Every capture has its own animation, named "
+            "for the pair of pieces in it. Six pieces can take, five can be "
+            "taken - a king is never captured - and no two of the thirty are "
+            "the same."))
+        table = QTreeWidget()
+        table.setHeaderLabels(["Capture", "Duel", "What happens"])
+        table.setRootIsDecorated(False)
+        table.setAlternatingRowColors(True)
+        from ..battle.duels import duel_rows
+        for key, name, line in duel_rows():
+            QTreeWidgetItem(table, [key, name, line])
+        table.resizeColumnToContents(0)
+        table.setColumnWidth(1, 130)
+        table.setColumnWidth(2, 330)
+        layout.addWidget(table, 1)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
 
 
 # --------------------------------------------------------------------------

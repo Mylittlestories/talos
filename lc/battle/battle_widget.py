@@ -24,6 +24,7 @@ from PyQt6.QtGui import QCursor, QFont, QPainter, QColor
 from PyQt6.QtOpenGLWidgets import QOpenGLWidget
 from PyQt6.QtWidgets import QWidget
 
+from . import duels as dueltable
 from . import meshes
 from .physics import PhysicsWorld
 
@@ -137,6 +138,16 @@ class Fight:
     gore: bool = True
     dir_x: float = 0.0
     dir_z: float = 1.0
+    # The duel this capture is: its name, and the length of each of its
+    # four beats.  Every permutation runs at its own pace - the scuffle of
+    # two pawns is over in a blink, a regicide takes its time.
+    duel: Optional[object] = None
+    approach: float = 0.42
+    strike: float = 0.34
+    impact_beat: float = 0.14
+    recover: float = 0.42
+    debris: str = "blood"
+    force: float = 0.8
 
 
 @dataclass
@@ -282,13 +293,18 @@ class BattleBoardWidget(QOpenGLWidget):
             vx, vz = square_to_xz(captured_square, self.flipped)
             if victim is None:
                 victim = Piece3D(piece=captured, square=captured_square, x=vx, z=vz)
+            # Every permutation of attacker and victim has its own animation.
+            duel = dueltable.duel_for(piece, captured)
             fight = Fight(attacker=attacker, victim=captured, victim_square=captured_square,
                           victim_x=vx, victim_z=vz, to_square=move.to_square, move=move,
-                          style=self._style_for(piece, captured),
+                          style=duel.style,
                           slide_from=(attacker.x, attacker.z),
                           is_ep=record.is_en_passant, promotion=move.promotion,
-                          victim_ref=victim, choreo=self._choreography(piece, captured),
-                          gore=self.gore != "Arcade")
+                          victim_ref=victim, choreo=duel.choreo,
+                          gore=self.gore != "Arcade",
+                          duel=duel, approach=duel.approach, strike=duel.strike,
+                          impact_beat=duel.impact, recover=duel.recover,
+                          debris=duel.debris, force=duel.shake)
             dx = vx - attacker.x
             dz = vz - attacker.z
             length = math.hypot(dx, dz) or 1.0
@@ -322,11 +338,8 @@ class BattleBoardWidget(QOpenGLWidget):
 
     @staticmethod
     def _style_for(attacker: chess.Piece, victim: chess.Piece) -> str:
-        table = {
-            chess.PAWN: "stab", chess.KNIGHT: "slash", chess.BISHOP: "beam",
-            chess.ROOK: "smash", chess.QUEEN: "shock", chess.KING: "hammer",
-        }
-        return table.get(attacker.piece_type, "smash")
+        """How *attacker* moves, from the table of thirty duels."""
+        return dueltable.duel_for(attacker, victim).style
 
     @staticmethod
     def _choreography(attacker: chess.Piece, victim: chess.Piece) -> str:
@@ -336,15 +349,7 @@ class BattleBoardWidget(QOpenGLWidget):
         victim decided a lot of it: kings lose their heads, pawns get knocked
         over like skittles, and anything the bishop touches is simply gone.
         """
-        if victim.piece_type == chess.KING:
-            return "behead"
-        if victim.piece_type == chess.PAWN:
-            return "topple"
-        table = {
-            chess.PAWN: "impale", chess.KNIGHT: "behead", chess.BISHOP: "disintegrate",
-            chess.ROOK: "flatten", chess.QUEEN: "shatter", chess.KING: "flatten",
-        }
-        return table.get(attacker.piece_type, "shatter")
+        return dueltable.duel_for(attacker, victim).choreo
 
     # -- animation ---------------------------------------------------------
     def _tick(self) -> None:
@@ -414,7 +419,10 @@ class BattleBoardWidget(QOpenGLWidget):
         ux, uz = dx / dist, dz / dist
         face = math.atan2(uz, ux)
 
-        APPROACH, STRIKE, IMPACT, RETURN = 0.42, 0.34, 0.14, 0.42
+        APPROACH = fight.approach
+        STRIKE = fight.strike
+        IMPACT = fight.impact_beat
+        RETURN = fight.recover
         total = APPROACH + STRIKE + IMPACT + RETURN
         p = fight.t
 
@@ -447,6 +455,39 @@ class BattleBoardWidget(QOpenGLWidget):
             elif fight.style == "beam":
                 a.y = 0.05 + k * 0.12
                 a.pitch = -k * 0.25
+            elif fight.style == "club":
+                # a wide overhead swing with whatever comes to hand
+                a.pitch = -math.sin(min(1.0, k * 1.4) * math.pi * 0.5) * 1.35
+                a.y = 0.06 + math.sin(k * math.pi) * 0.18
+            elif fight.style == "pounce":
+                # he climbs the victim and comes down on top of it
+                a.y = math.sin(k * math.pi) * 0.85
+                a.x += ux * math.sin(k * math.pi) * 0.55
+                a.z += uz * math.sin(k * math.pi) * 0.55
+                a.pitch = -k * 0.55
+            elif fight.style == "charge":
+                # press the attack: closer, and shaking the ground
+                a.x -= ux * 0.55 * k * k
+                a.z -= uz * 0.55 * k * k
+                a.y = abs(math.sin(k * math.pi * 2)) * 0.10
+                a.pitch = -0.18 * k
+            elif fight.style == "hex":
+                a.y = 0.10 + k * 0.22
+                a.pitch = -k * 0.35
+                a.yaw = face + math.sin(k * math.pi * 4) * 0.18
+            elif fight.style == "swing":
+                a.yaw = face - 0.9 + 1.8 * k
+                a.y = 0.08 + math.sin(k * math.pi) * 0.14
+            elif fight.style == "crush":
+                # up, and down hard
+                if k < 0.6:
+                    j = k / 0.6
+                    a.y = 0.9 * (j ** 0.6)
+                    a.pitch = -0.5 * j
+                else:
+                    j = (k - 0.6) / 0.4
+                    a.y = 0.9 * (1 - j * j)
+                    a.pitch = -0.5 + 0.5 * j
             else:      # shock
                 a.yaw = face + k * math.tau
                 a.y = math.sin(k * math.pi) * 0.55
@@ -459,7 +500,10 @@ class BattleBoardWidget(QOpenGLWidget):
             fight.stage = "impact"
             self._step_victim(fight, dt)
         else:
-            k = (p - APPROACH - STRIKE - IMPACT) / RETURN
+            # Clamped: the fight may outlast this beat while the victim
+            # finishes dying, and an unclamped eased value would walk the
+            # attacker straight through its own square.
+            k = min(1.0, (p - APPROACH - STRIKE - IMPACT) / RETURN)
             eased = 1 - (1 - k) ** 2
             self._step_victim(fight, dt)
             a.x = (fight.victim_x - ux * 1.15) + (tx - (fight.victim_x - ux * 1.15)) * eased
@@ -476,7 +520,14 @@ class BattleBoardWidget(QOpenGLWidget):
                     self.physics.burst([tx, 0.8, tz], (1.0, 0.9, 0.5), count=30, power=2.0)
                 a.square = fight.to_square
                 self.pieces[fight.to_square] = a
-                fight.finished = True
+                # The attacker is home, but the victim may still be dying.
+                # The 1988 original let the death play out before the game
+                # moved on, so hold the turn for it - with a limit, so a
+                # death that never resolves cannot stall the board.
+                victim = fight.victim_ref
+                gone = victim is None or not victim.alive
+                if gone or fight.t > total + 1.6:
+                    fight.finished = True
 
     # -- gore ------------------------------------------------------------
     # The victim keeps standing while the attacker winds up, then dies in the
@@ -484,6 +535,10 @@ class BattleBoardWidget(QOpenGLWidget):
     # there is no animation library, just a few curves per choreography.
     BLOOD = (0.52, 0.03, 0.04)
     DUST = (0.72, 0.68, 0.60)
+    #: what a duel leaves on the square, by its ``debris`` field
+    DEBRIS_TINT = {"blood": None, "dust": (0.72, 0.68, 0.60),
+                   "spark": (0.65, 0.55, 0.95), "glass": (0.72, 0.86, 0.95),
+                   "rubble": (0.62, 0.60, 0.55)}
 
     def _step_victim(self, fight: Fight, dt: float) -> None:
         v = fight.victim_ref
@@ -499,16 +554,17 @@ class BattleBoardWidget(QOpenGLWidget):
             if v.scale <= 0.01:
                 v.alive = False
         elif fight.choreo == "flatten":
+            # Squashed, then swept away.  Both halves are written as a
+            # function of elapsed time: an accumulating scale would be
+            # overwritten by the line above it every frame.
             k = min(1.0, g / 0.22)
             v.sy = 1.0 - 0.86 * k
-            v.scale = 1.0 + 0.30 * k
-            if g > 0.30:
-                v.scale = max(0.001, v.scale - dt * 4.0)
-                if v.scale <= 0.02:
-                    v.alive = False
-                    self.physics.shatter([v.x, 0.05, v.z], self._victim_colour(fight),
-                                         count=10 if self.gore != "Arcade" else 14,
-                                         power=0.8)
+            v.scale = max(0.001, 1.0 + 0.30 * k - max(0.0, g - 0.30) * 4.0)
+            if v.scale <= 0.02:
+                v.alive = False
+                self.physics.shatter([v.x, 0.05, v.z], self._victim_colour(fight),
+                                     count=10 if self.gore != "Arcade" else 14,
+                                     power=0.8)
         elif fight.choreo == "impale":
             k = min(1.0, g / 0.85)
             v.y = 1.05 * math.sin(min(1.0, g / 0.5) * math.pi * 0.5)
@@ -534,6 +590,55 @@ class BattleBoardWidget(QOpenGLWidget):
                 v.scale = max(0.001, v.scale - dt * 3.4)
                 if v.scale <= 0.02:
                     v.alive = False
+        elif fight.choreo == "crumble":
+            # masonry: it sinks as it comes apart, and leaves rubble
+            k = min(1.0, g / 0.7)
+            v.y = -0.30 * k
+            v.sy = 1.0 - 0.55 * k
+            v.scale = max(0.001, 1.0 - max(0.0, (g - 0.35) / 0.45))
+            if v.scale <= 0.02:
+                v.alive = False
+                self.physics.shatter([v.x, 0.05, v.z], (0.62, 0.60, 0.55),
+                                     count=12, power=0.7)
+        elif fight.choreo == "burst":
+            v.scale = max(0.001, 1.0 - (g / 0.18))     # gone on contact
+            if v.scale <= 0.01:
+                v.alive = False
+        elif fight.choreo == "dismember":
+            # the knight's signature: it falls to pieces where it stood
+            k = min(1.0, g / 0.75)
+            v.roll = 2.4 * k * k
+            v.y = -0.18 * k
+            v.scale = max(0.001, 1.0 - max(0.0, (g - 0.4) / 0.35))
+            if v.scale <= 0.02:
+                v.alive = False
+        elif fight.choreo == "spin":
+            # thrown clear of the board, spinning
+            k = min(1.0, g / 0.6)
+            v.yaw += dt * 26.0 * (1.0 - k)
+            v.y = 0.35 * math.sin(k * math.pi) - 0.20 * k
+            v.x += fight.dir_x * dt * 5.0 * (1.0 - k * 0.5)
+            v.z += fight.dir_z * dt * 5.0 * (1.0 - k * 0.5)
+            v.scale = max(0.001, 1.0 - max(0.0, (g - 0.35) / 0.25))
+            if v.scale <= 0.02:
+                v.alive = False
+        elif fight.choreo == "melt":
+            # magic: there is nothing left to bury
+            k = min(1.0, g / 0.8)
+            v.sy = max(0.05, 1.0 - 0.92 * k)
+            v.scale = max(0.001, 1.0 + 0.34 * k - max(0.0, g - 0.85) * 3.0)
+            if v.scale <= 0.02:
+                v.alive = False
+        elif fight.choreo == "crush":
+            k = min(1.0, g / 0.26)
+            v.sy = 1.0 - 0.90 * k
+            v.scale = 1.0 + 0.34 * k
+            if g > 0.34:
+                v.scale = max(0.001, v.scale - dt * 4.4)
+                if v.scale <= 0.02:
+                    v.alive = False
+                    self.physics.shatter([v.x, 0.05, v.z], (0.66, 0.63, 0.58),
+                                         count=14, power=0.9)
         else:                                    # shatter - gone on contact
             v.scale = max(0.001, 1.0 - (g / 0.12))
             if v.scale <= 0.01:
@@ -551,7 +656,9 @@ class BattleBoardWidget(QOpenGLWidget):
             shards = max(6, shards // 3)
         if fight.choreo == "disintegrate":
             shards = max(8, shards // 2)
-        self.physics.shatter([fight.victim_x, 0.05, fight.victim_z], colour,
+        tint = self.DEBRIS_TINT.get(fight.debris)
+        self.physics.shatter([fight.victim_x, 0.05, fight.victim_z],
+                             tint or colour,
                              count=shards,
                              power=1.0 + (0.25 if self.quality == "Ultra" else 0.0))
         mid = [(a.x + fight.victim_x) / 2, 0.62, (a.z + fight.victim_z) / 2]
@@ -572,11 +679,26 @@ class BattleBoardWidget(QOpenGLWidget):
             self.physics.burst(mid, (1.0, 0.55, 0.85), count=46, power=3.4)
             self.shake = 0.85
             self._sound("clash")
+        elif fight.style in ("club", "swing", "crush"):
+            # blunt: a puff of stone dust and a shock through the board
+            self.physics.burst(mid, (0.80, 0.76, 0.66), count=26, power=2.2)
+            self.physics.wave([fight.victim_x, 0.18, fight.victim_z], speed=6.5)
+            self.shake = max(self.shake, 0.7)
+            self._sound("clash")
+        elif fight.style in ("pounce", "charge"):
+            self.physics.burst(mid, (0.95, 0.30, 0.26), count=30, power=2.6)
+            self.shake = max(self.shake, 0.6)
+            self._sound("clash")
+        elif fight.style == "hex":
+            self.physics.burst(mid, (0.60, 0.45, 0.95), count=36, power=2.0,
+                               spread=0.5)
+            self.shake = max(self.shake, 0.35)
+            self._sound("clash")
         else:
             self.physics.burst(mid, (1.0, 0.9, 0.6), count=22, power=1.8)
             self._sound("clash")
         self._sound("shatter")
-        self.shake = max(self.shake, 0.55)
+        self.shake = max(self.shake, fight.force * 0.75)
 
         # ---- and now the mess -------------------------------------------
         head = [fight.victim_x, 1.02, fight.victim_z]
@@ -628,6 +750,47 @@ class BattleBoardWidget(QOpenGLWidget):
         elif fight.choreo == "disintegrate":
             self.physics.burst([fight.victim_x, 0.7, fight.victim_z], (0.65, 0.55, 0.85),
                                count=44, power=1.6, spread=0.8)
+        elif fight.choreo == "dismember":
+            if gruesome:
+                self.physics.blood([fight.victim_x, 0.85, fight.victim_z],
+                                   count=54, power=1.8, spread=1.2)
+                self.physics.stain(fight.victim_x, fight.victim_z,
+                                   radius=0.40, color=self.BLOOD, life=9.0)
+                for part, height in (("head", 1.05), ("limb", 0.62), ("limb", 0.40)):
+                    self.physics.limb([fight.victim_x, height, fight.victim_z], part,
+                                      colour, power=1.15, scale=0.30)
+            else:
+                self.physics.burst([fight.victim_x, 0.8, fight.victim_z],
+                                   (0.95, 0.92, 0.72), count=32, power=2.2)
+            self.shake = max(self.shake, 1.0)
+        elif fight.choreo == "burst":
+            if gruesome:
+                self.physics.blood([fight.victim_x, 0.55, fight.victim_z],
+                                   count=40, power=2.0, spread=1.5, upward=1.0)
+                self.physics.stain(fight.victim_x, fight.victim_z,
+                                   radius=0.30, color=self.BLOOD, life=7.0)
+            else:
+                self.physics.burst([fight.victim_x, 0.5, fight.victim_z],
+                                   (0.95, 0.92, 0.72), count=24, power=2.0)
+            self.shake = max(self.shake, 0.7)
+        elif fight.choreo == "spin":
+            if gruesome:
+                self.physics.blood([fight.victim_x, 0.75, fight.victim_z],
+                                   count=30, power=1.5, spread=1.8, upward=0.9)
+            self.shake = max(self.shake, 0.75)
+        elif fight.choreo == "melt":
+            # magic leaves a scorch, not a body
+            self.physics.burst([fight.victim_x, 0.45, fight.victim_z],
+                               (0.60, 0.42, 0.95), count=30, power=1.4, spread=0.9)
+            self.physics.stain(fight.victim_x, fight.victim_z,
+                               radius=0.28, color=(0.22, 0.10, 0.30), life=6.0)
+            self.shake = max(self.shake, 0.45)
+        elif fight.choreo in ("crumble", "crush"):
+            self.physics.burst([fight.victim_x, 0.25, fight.victim_z], self.DUST,
+                               count=26, power=1.3, spread=1.5)
+            self.physics.stain(fight.victim_x, fight.victim_z,
+                               radius=0.24, color=(0.30, 0.28, 0.24), life=5.0)
+            self.shake = max(self.shake, 0.85)
 
     def _sound(self, name: str) -> None:
         if self.sounds is not None:

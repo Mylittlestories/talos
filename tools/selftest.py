@@ -287,8 +287,10 @@ def test_uci() -> None:
 
 def test_battle() -> None:
     section("Battle Chess (simulation, no GL needed)")
+    import math
     from lc.battle import meshes, physics
-    from lc.battle.battle_widget import BattleBoardWidget
+    from lc.battle import battle_widget as bw
+    from lc.battle.battle_widget import BattleBoardWidget, square_to_xz
 
     for piece_type in (chess.PAWN, chess.KNIGHT, chess.BISHOP, chess.ROOK,
                        chess.QUEEN, chess.KING):
@@ -337,6 +339,62 @@ def test_battle() -> None:
           f"{len(widget.physics.shards)} shards")
     check("scene resynchronises", all(
         widget.pieces[square].piece == board.piece_at(square) for square in widget.pieces))
+
+    # ---- the thirty duels: a different animation for each permutation ----
+    from lc.battle import duels as dueltable
+    attackers = (chess.PAWN, chess.KNIGHT, chess.BISHOP, chess.ROOK,
+                 chess.QUEEN, chess.KING)
+    victims = (chess.PAWN, chess.KNIGHT, chess.BISHOP, chess.ROOK, chess.QUEEN)
+    check("every permutation has a duel",
+          all((a, v) in dueltable.DUELS for a in attackers for v in victims),
+          f"{dueltable.DUEL_COUNT} duels")
+    pairs = [(d.style, d.choreo) for d in dueltable.DUELS.values()]
+    check("no two duels are the same animation", len(set(pairs)) == len(pairs),
+          f"{len(set(pairs))} distinct of {len(pairs)}")
+    check("every duel is named",
+          len({d.name for d in dueltable.all_duels()}) == dueltable.DUEL_COUNT)
+
+    # one capture through the fight state machine, no GL needed
+    def play(at: int, vt: int):
+        a_piece, v_piece = chess.Piece(at, chess.WHITE), chess.Piece(vt, chess.BLACK)
+        start, end = chess.E2, chess.D3
+        ax, az = square_to_xz(start)
+        vx, vz = square_to_xz(end)
+        attacker = bw.Piece3D(piece=a_piece, square=start, x=ax, z=az)
+        victim = bw.Piece3D(piece=v_piece, square=end, x=vx, z=vz)
+        duel = dueltable.duel_for(a_piece, v_piece)
+        fight = bw.Fight(attacker=attacker, victim=v_piece, victim_square=end,
+                         victim_x=vx, victim_z=vz, to_square=end,
+                         move=chess.Move(start, end), style=duel.style,
+                         slide_from=(ax, az), victim_ref=victim,
+                         choreo=duel.choreo, gore=True, duel=duel,
+                         approach=duel.approach, strike=duel.strike,
+                         impact_beat=duel.impact, recover=duel.recover,
+                         debris=duel.debris, force=duel.shake)
+        dx, dz = vx - ax, vz - az
+        span = math.hypot(dx, dz) or 1.0
+        fight.dir_x, fight.dir_z = dx / span, dz / span
+        frames = 0
+        while not fight.finished and frames < 900:
+            widget._step_fight(fight, 1 / 60)
+            frames += 1
+        tx, tz = square_to_xz(end, widget.flipped)
+        home = abs(attacker.x - tx) < 1e-6 and abs(attacker.z - tz) < 1e-6
+        return duel, frames / 60, victim.alive, home
+
+    broken, slow, fastest = [], 0.0, 9.0
+    for at in attackers:
+        for vt in victims:
+            duel, seconds, alive, home = play(at, vt)
+            slow = max(slow, seconds)
+            fastest = min(fastest, seconds)
+            if alive or not home:
+                broken.append(duel.key)
+    check("all thirty duels play out", not broken,
+          "the victim dies and the attacker reaches its square in each"
+          if not broken else "stuck: " + ", ".join(broken))
+    check("captures last about as long as the original's",
+          1.0 <= fastest and slow <= 2.6, f"{fastest:.2f}s to {slow:.2f}s")
 
 
 def test_anarchy() -> None:
