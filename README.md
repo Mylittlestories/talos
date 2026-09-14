@@ -258,6 +258,8 @@ pyinstaller packaging/talos.spec --noconfirm --distpath dist
 ```bash
 python tools/build_web.py     # Python core, vendored python-chess, puzzles, icons
 python tools/web_smoke.mjs    # needs: npm install pyodide@0.27.7
+node tools/web_dom_check.mjs  # drives the real browser UI in jsdom
+python tools/app_smoke.py     # drives the desktop application itself
 ```
 
 The result in `web/` is a plain static site: upload it anywhere, or open it from
@@ -306,10 +308,12 @@ lucaschess/
 ├── tools/
 │   ├── build_web.py       builds web/ from the real modules
 │   ├── web_smoke.mjs      boots the payload in Pyodide and plays it
+│   ├── web_dom_check.mjs  drives the real browser UI in jsdom
+│   ├── app_smoke.py       builds the window and plays through every mode
 │   ├── make_deck.py       builds the presentation
 │   ├── make_icon.py       builds the icon set in assets/
 │   ├── release_notes.py   lifts one version out of CHANGELOG.md
-│   ├── selftest.py        100 headless checks
+│   ├── selftest.py        119 headless checks
 │   └── bench.py           engine benchmark / ablation harness
 └── lc/
     ├── core/              engine, UCI driver, game model, players, clocks
@@ -371,10 +375,13 @@ lucaschess/
   platform; the binary is ~110 MB, which is why it is not shipped in the
   repo. The built-in engine needs nothing extra and plays all variants,
   including the ones Stockfish cannot.
-* **Check yourself** – `python tools/selftest.py` runs 100 headless checks
+* **Check yourself** – `python tools/selftest.py` runs 119 headless checks
   over the engine, every variant, the Anarchchess rules, the Anarchess game,
   the learning model, the training modes, the database, the UCI driver and
-  the Battle Chess simulation (no display required).
+  the Battle Chess simulation (no display required). `python
+  tools/app_smoke.py` builds the real window and plays Anarchess in all three
+  of its modes; `tools/web_smoke.mjs` and `tools/web_dom_check.mjs` do the
+  same for the browser edition.
 * **Screenshots** – `python tools/capture_preview.py` renders the real
   application into `preview/`. It needs a display: on a headless machine run
   it under `xvfb-run -s "-screen 0 1600x1000x24"`.
