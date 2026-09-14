@@ -82,7 +82,7 @@ def level_rows() -> str:
 def rule_items() -> str:
     out = []
     for entry in RULE_BOOK:
-        key, title = entry[0], entry[1]
+        title = entry[1]
         if len(entry) > 2 and isinstance(entry[2], str) and entry[2]:
             tip = entry[2]
         else:
@@ -102,7 +102,7 @@ TEMPLATE = '''<!DOCTYPE html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>TALOS — The Living Chess Studio</title>
-<meta name="description" content="TALOS: a Lucas Chess inspired chess studio with its own engine, 112,000 puzzles, Anarchess and Anarchchess. Windows, Linux, Android and browser editions.">
+<meta name="description" content="TALOS: a Lucas Chess inspired chess studio with its own engine, 112,000 puzzles, Anarchess and Anarchchess. Windows, Linux, macOS, Android and browser editions.">
 <style>
 :root{
   --window:#0e1015; --panel:#151925; --panel2:#1b2030; --line:#272d3d;
@@ -278,7 +278,7 @@ body.over .slide.active{outline:2px solid var(--accent)}
         <p class="lead">A chess studio in the spirit of Lucas Chess, rebuilt from
           the board up: its own engine, an adaptive coach, 112,000 real puzzles,
           the Anarchchess house rules and the Anarchess board game — on Windows,
-          Linux, Android and in a browser tab.</p>
+          Linux, macOS, Android and in a browser tab.</p>
         <div class="cta">
           <a class="primary" id="play-link" href="../web/index.html">Play in your browser</a>
           <a class="ghost" href="__REPO__">Source &amp; downloads</a>
@@ -319,9 +319,10 @@ body.over .slide.active{outline:2px solid var(--accent)}
       </div>
       <div>
         <div class="card" style="margin-bottom:12px">
-          <h4>Four editions, one core</h4>
-          <p>Windows, Linux, Android (installable web app) and the browser all
-            execute the same Python modules. No feature is web-only.</p>
+          <h4>Five editions, one core</h4>
+          <p>Windows, Linux, macOS, a native Android APK and the browser all
+            share the same chess core. The Android shell packages local web
+            assets rather than just opening a hosted page.</p>
         </div>
         <div class="card" style="margin-bottom:12px">
           <h4>Variants that are actually different</h4>
@@ -436,9 +437,10 @@ __RULES__
     <p class="lead">A real abstract strategy game by <b>Dimitris Grammenos</b>
       (ICS-FORTH, Heraklion). Two proud tribes, no kings yet, growing a
       landscape out of 32 light and 32 dark tiles. Implemented from the
-      designer's own rulebook rather than reconstructed from a summary — and
-      shipped with the two further variants he published: <b>Anarchess
-      SOLO</b> and <b>Anarcheckers</b>.</p>
+      designer's own rulebook rather than reconstructed from a summary. The
+      two further published games, <b>Anarchess SOLO</b> and
+      <b>Anarcheckers</b>, are independent desktop entries and browser pages,
+      not modes attached to this board.</p>
     <div class="cols">
       <div>
         <h3>A turn</h3>
@@ -477,31 +479,30 @@ __RULES__
         <p class="lead">The studio is a study tool first. Battle Chess mode is a
           toggle in the toolbar: on for the spectacle, off for analysis.</p>
         <ul>
-          <li><b>Thirty duels</b> — a different animation for every
-            permutation, as in the 1988 original. A knight taking a knight
-            cuts his enemy limb from limb; a knight facing the queen dodges
-            her magic and turns it against her. Two pawns scuffle; a king
-            taking a queen is an abdication.</li>
-          <li>Each duel runs at its own pace and leaves its own mess: blood,
-            dust, glass or rubble, whatever the pair deserves.</li>
-          <li>Procedural geometry and particles — <b>no gigabytes of assets</b>,
-            no downloads, works offline.</li>
-          <li>Gore level <b>classic</b>: the 1988 tone. Stylised blood spray and
-            debris, never gritty dismemberment.</li>
-          <li>Blood stains stay on the board for the rest of the game.</li>
+          <li><b>Thirty original duels</b> — every legal attacker/victim pair
+            has a named approach, strike, impact and recovery. The idea is
+            classic living chess; the geometry, choreography and foley are
+            TALOS's own.</li>
+          <li>Each encounter leaves an appropriate stylised trace: dust, glass,
+            rubble, sparks or optional fantasy blood.</li>
+          <li>Procedural geometry, physics and synthesised sound — no copied
+            models, animation data or sound library, and no downloads for art.</li>
+          <li><b>Four pacing choices:</b> Full stage, Combat only, Walks only
+            and Still board. Study never has to wait for spectacle.</li>
+          <li>Input, analysis, engine replies and the result dialog wait for an
+            active encounter instead of overwriting it.</li>
         </ul>
       </div>
       <div class="card">
         <h4>Why procedural?</h4>
-        <p>The obvious route — the Battle Chess 9000 asset set — is roughly
-          1.2&nbsp;GB of models and textures. Rebuilding the choreographies out
-          of procedural geometry keeps the whole studio a few tens of
-          megabytes and makes the animation real-time instead of canned.</p>
+        <p>A hand-built arena, stage lights and piece silhouettes let the game
+          feel theatrical while keeping it fast, local and original. The board
+          focuses gently on a duel, then returns to a useful chess view.</p>
         <h4 style="margin-top:12px">Pieces that walk</h4>
         <p>Each rank crosses the board in its own way. The knight leaves the
           ground altogether; the rook takes two enormous paces and lands like a
-          dropped wall; the bishop never quite touches the floor; the king
-          waddles. Six walks, and thirty ways to die.</p>
+          dropped wall; the bishop barely touches the floor; the king waddles.
+          Six gaits, thirty original encounters.</p>
       </div>
     </div>
   </div>
@@ -535,8 +536,8 @@ __RULES__
 </section>
 
 <!-- 9 ------------------------------------------------------------------ -->
-<section class="slide" data-title="Four editions">
-  <header><p class="kicker">Availability</p><h2>One codebase, four editions</h2></header>
+<section class="slide" data-title="Five editions">
+  <header><p class="kicker">Availability</p><h2>One codebase, five editions</h2></header>
   <div class="body">
     <table>
       <tr><th>Edition</th><th>What you install</th><th>Engine</th><th>Offline</th></tr>
@@ -546,16 +547,21 @@ __RULES__
       <tr><td><b>Linux</b></td><td>One-folder build + <code>install.sh</code>
         into <code>~/.local</code>; ships a <code>.desktop</code> file and
         AppStream metadata.</td><td>Python core + optional Stockfish</td><td>yes</td></tr>
-      <tr><td><b>Android</b></td><td>Nothing to sideload: open the site and
-        “Add to Home Screen”. It becomes a full-screen, offline app.</td>
-        <td>Python core under Pyodide</td><td>after first load</td></tr>
+      <tr><td><b>macOS</b></td><td>PyInstaller <code>.app</code> bundle in a
+        ZIP. Unsigned until a maintainer adds Apple signing.</td>
+        <td>Python core + optional Stockfish</td><td>yes</td></tr>
+      <tr><td><b>Android</b></td><td>A native Capacitor APK packages the local
+        web payload. Every tag builds an installable debug APK; signed release
+        APKs use a maintainer-owned key.</td>
+        <td>Python core under Pyodide</td><td>after first runtime boot</td></tr>
       <tr><td><b>Browser</b></td><td>Nothing at all. <code>__PAGES__</code> →
         play. A service worker caches the whole studio.</td>
         <td>Python core under Pyodide</td><td>after first load</td></tr>
     </table>
     <p style="margin-top:14px"><small>Battle Chess mode (real-time 3D) and
       Stockfish are desktop-only; everything else — engine, levels, puzzles,
-      Anarchchess, Anarchess, the coach — is identical in all four.</small></p>
+      Anarchchess, Anarchess SOLO, Anarcheckers and the coach — is shared
+      across the supported editions.</small></p>
   </div>
 </section>
 
@@ -586,7 +592,7 @@ __RULES__
     </div>
     <div class="cols3">
       <div class="card"><h4>1.1 MB</h4><p>Python core, vendored and ready.</p></div>
-      <div class="card"><h4>82 checks</h4><p><code>tools/web_smoke.mjs</code>
+      <div class="card"><h4>89 checks</h4><p><code>tools/web_smoke.mjs</code>
         boots the payload in Node and plays a game, a puzzle and an Anarchess
         turn on every push.</p></div>
       <div class="card"><h4>0 requests</h4><p>to any TALOS server, ever. There
@@ -673,8 +679,10 @@ __RULES__
             wins are in move ordering and the endgame tables.</li>
           <li>More of the Lucas corpus: openings trainer and the replay
             database in the browser edition.</li>
-          <li>Battle Chess choreographies for the remaining piece pairings.</li>
-          <li>A macOS notarised build (the job exists; it needs a certificate).</li>
+          <li>Optional richer Battle stage variants without compromising its
+            original procedural asset policy.</li>
+          <li>A signed Android release APK and macOS notarised build — both need
+            maintainer-owned signing identities, not fabricated CI keys.</li>
         </ul>
       </div>
       <div>

@@ -24,9 +24,9 @@ Writes into assets/:
 
 from __future__ import annotations
 
-import math
 import os
 import subprocess
+import sys
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 

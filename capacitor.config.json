@@ -1,0 +1,14 @@
+{
+  "appId": "org.taloschess.studio",
+  "appName": "TALOS",
+  "webDir": "web",
+  "bundledWebRuntime": false,
+  "server": {
+    "androidScheme": "https",
+    "cleartext": false
+  },
+  "android": {
+    "allowMixedContent": false,
+    "webContentsDebuggingEnabled": false
+  }
+}

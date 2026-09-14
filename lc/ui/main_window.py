@@ -15,19 +15,20 @@ import chess
 import chess.pgn
 import io as _io
 
-from PyQt6.QtCore import QSize, Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QAction, QActionGroup, QIcon, QKeySequence, QPixmap
+from PyQt6.QtCore import QSize, Qt, QTimer
+from PyQt6.QtGui import QAction, QActionGroup, QKeySequence
 from PyQt6.QtWidgets import QSizePolicy
-from PyQt6.QtWidgets import (QApplication, QDockWidget, QFileDialog, QHBoxLayout,
-                             QInputDialog, QLabel, QMainWindow, QMenu, QMessageBox,
-                             QProgressBar, QPushButton, QSplitter, QStackedWidget,
-                             QStatusBar, QTabWidget, QToolBar, QVBoxLayout, QWidget)
+from PyQt6.QtWidgets import (QApplication, QFileDialog, QHBoxLayout,
+                             QLabel, QMainWindow, QMenu, QMessageBox,
+                             QProgressBar, QStackedWidget, QStatusBar,
+                             QTabWidget, QToolBar, QVBoxLayout, QWidget)
 
-from .. import APP_FULL_NAME, APP_NAME, APP_TAGLINE, window_title
+from .. import APP_FULL_NAME, APP_NAME
+from ..paths import data_dir
 from .theme import PALETTE_NAMES, app_logo, themed_icon
 
-from ..core.engine import DEFAULT_LEVELS, Level, level_by_name
-from ..core.game import Clock, Game, TimeControl, VARIANTS, format_clock
+from ..core.engine import DEFAULT_LEVELS, level_by_name
+from ..core.game import Game, TimeControl, VARIANTS
 from ..core.players import BuiltInPlayer, HumanPlayer, Player, UCIPlayer
 from ..core.uci import Limit, find_engines
 from ..training import sessions
@@ -38,11 +39,12 @@ from .dialogs import (EngineManagerDialog, NewGameDialog, PositionDialog,
                       about_dialog)
 from .panels import (ClockWidget, EngineInfoPanel, EvalBar, EvalGraph, MaterialWidget,
                      MoveListWidget, PocketStrip)
-from .pieces import STYLES, PiecePainter
+from .pieces import STYLES
 from .sounds import SoundBank
 
-DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
-    os.path.abspath(__file__)))), "data")
+# Resource files are read-only once TALOS is installed. Player settings and
+# SQLite progress instead live in a per-user directory (or TALOS_DATA_DIR).
+DATA_DIR = str(data_dir())
 
 
 class MainWindow(QMainWindow):
@@ -80,6 +82,11 @@ class MainWindow(QMainWindow):
         self.hint_level = 0
         self.show_solution = False
         self._pending_reply: Optional[chess.Move] = None
+        # The 3D stage is visual, but it must not let an engine's next turn
+        # erase a duel the player has not had a chance to see.
+        self._battle_move_in_progress = False
+        self._battle_waiting_turn = False
+        self._battle_pending_result: Optional[Tuple[str, str]] = None
         self.blindfold_counter = 0
 
         self._build_ui()
@@ -99,7 +106,8 @@ class MainWindow(QMainWindow):
             "board_theme": "wood", "piece_style": "classic", "animate": True,
             "coords": True, "legal_moves": True, "sound": True, "volume": 80,
             "auto_queen": True, "auto_save": True, "show_eval": True,
-            "battle_captures": True, "battle_quality": "High", "battle_camera": "Cinematic",
+            "battle_captures": True, "battle_animation": "Full stage",
+            "battle_quality": "High", "battle_camera": "Cinematic",
             "battle_gore": "Classic", "ui_theme": "midnight",
             "analysis_depth_ms": 1200, "multipv": 3,
             "engines": [], "last_white": {}, "last_black": {},
@@ -121,6 +129,11 @@ class MainWindow(QMainWindow):
         if gore not in ("Classic", "Arcade"):
             gore = "Classic"
         defaults["battle_gore"] = gore
+        modes = ("Full stage", "Combat only", "Walks only", "Still board")
+        mode = defaults.get("battle_animation")
+        if mode not in modes:
+            mode = "Full stage" if defaults.get("battle_captures", True) else "Walks only"
+        defaults["battle_animation"] = mode
         if defaults.get("ui_theme") not in ("midnight", "slate", "parchment"):
             defaults["ui_theme"] = "midnight"
         return defaults
@@ -166,7 +179,10 @@ class MainWindow(QMainWindow):
                                piece_style=self.settings.get("piece_style", "classic"))
         self.stack.addWidget(self.board)
         self.battle_widget = None          # created on demand
-        self.anarchess = None              # created on demand
+        # Each land game keeps its own page and position. ``anarchess`` stays
+        # as a compatibility alias for the original standard-game page.
+        self.land_views: Dict[str, QWidget] = {}
+        self.anarchess = None
         self.ui_theme = self.settings.get("ui_theme", "midnight")
         board_layout.addWidget(self.stack, 1)
         # crazyhouse pockets (hidden unless the variant uses them)
@@ -307,6 +323,21 @@ class MainWindow(QMainWindow):
             a.triggered.connect(lambda _=False, k=key: self.set_battle_camera(k))
             battle_menu.addAction(a)
         battle_menu.addSeparator()
+        animation_menu = battle_menu.addMenu("Animation")
+        animation_group = QActionGroup(animation_menu)
+        for mode, tip in (
+                ("Full stage", "Every piece walks; captures play a complete duel."),
+                ("Combat only", "Keep the board brisk; stage captures only."),
+                ("Walks only", "Show movement but resolve captures instantly."),
+                ("Still board", "No staged motion; use the 3D board as a quiet view.")):
+            a = QAction(mode, self)
+            a.setCheckable(True)
+            a.setToolTip(tip)
+            a.setChecked(self.settings.get("battle_animation", "Full stage") == mode)
+            a.triggered.connect(lambda _=False, k=mode: self.set_battle_animation(k))
+            animation_group.addAction(a)
+            animation_menu.addAction(a)
+        battle_menu.addSeparator()
         gore_menu = battle_menu.addMenu("Gore")
         gore_group = QActionGroup(gore_menu)
         for level, tip in (("Classic", "1988 tone: decapitations, shattering, "
@@ -328,9 +359,13 @@ class MainWindow(QMainWindow):
 
         # ---- Anarchy
         anarchy_menu = menu.addMenu("A&narchy")
-        act = self._action("Anarchess - the land before Chess…",
-                           self.show_anarchess, "Ctrl+Shift+A", anarchy_menu)
+        act = self._action("Play Anarchess…", self.show_anarchess,
+                           "Ctrl+Shift+A", anarchy_menu)
         act.setIcon(themed_icon("anarchess", self.ui_theme))
+        self._action("Play Anarchess SOLO…", self.show_anarchess_solo, "",
+                     anarchy_menu)
+        self._action("Play Anarcheckers…", self.show_anarcheckers, "",
+                     anarchy_menu)
         anarchy_menu.addSeparator()
         self._action("How the rules work…", self.show_anarchy_rules, "",
                      anarchy_menu)
@@ -443,7 +478,7 @@ class MainWindow(QMainWindow):
                 ("Analyse", self.toggle_analysis, "Continuous analysis", "analyse"),
                 ("Battle", self.toggle_battle, "Battle Chess 3D mode (Ctrl+B)", "battle"),
                 ("Anarchess", self.show_anarchess,
-                 "Play Anarchess, the land before Chess", "anarchess")):
+                 "Play the original land-building game", "anarchess")):
             action = QAction(themed_icon(icon, self.ui_theme, 40), text, self)
             action.triggered.connect(slot)
             action.setToolTip(tip)
@@ -488,6 +523,11 @@ class MainWindow(QMainWindow):
         if gore not in ("Classic", "Arcade"):
             gore = "Classic"
         self.settings["battle_gore"] = gore
+        modes = ("Full stage", "Combat only", "Walks only", "Still board")
+        mode = self.settings.get("battle_animation")
+        if mode not in modes:
+            mode = "Full stage" if self.settings.get("battle_captures", True) else "Walks only"
+        self.settings["battle_animation"] = mode
         if self.settings.get("ui_theme") not in ("midnight", "slate", "parchment"):
             self.settings["ui_theme"] = "midnight"
         self.ui_theme = self.settings["ui_theme"]
@@ -503,6 +543,15 @@ class MainWindow(QMainWindow):
     # game setup
     # ------------------------------------------------------------------
     def new_game(self, interactive: bool = True, reuse: bool = False) -> None:
+        # A fresh chess game invalidates any stage record still in flight.
+        self._battle_waiting_turn = False
+        self._battle_pending_result = None
+        # Choosing a chess game from a land-game page must take the player
+        # back to the chess board and freeze any hidden land opponents.
+        if self.stack.currentWidget() in self.land_views.values():
+            for view in self.land_views.values():
+                view.set_game_active(False)
+            self.stack.setCurrentWidget(self.board)
         cfg = self.game_cfg
         if interactive or cfg is None or not reuse:
             dialog = NewGameDialog(self, self.engines, cfg)
@@ -675,6 +724,17 @@ class MainWindow(QMainWindow):
             return
         self.do_move(move)
 
+    def _push_with_battle_transaction(self, move: chess.Move,
+                                      comment: str = ""):
+        """Push a model move without letting refresh erase its stage opener."""
+        staging = (self.battle_widget is not None
+                   and self.stack.currentWidget() is self.battle_widget)
+        self._battle_move_in_progress = staging
+        try:
+            return self.game.push(move, comment)
+        finally:
+            self._battle_move_in_progress = False
+
     def do_move(self, move: chess.Move, comment: str = "") -> bool:
         if self.pending_move is not None:
             return False
@@ -684,7 +744,7 @@ class MainWindow(QMainWindow):
             dialog = PromotionDialog(self, piece.color)
             if dialog.exec():
                 move = chess.Move(move.from_square, move.to_square, promotion=dialog.choice)
-        record = self.game.push(move, comment)
+        record = self._push_with_battle_transaction(move, comment)
         if record is None:
             self.sounds.play("error")
             return False
@@ -718,11 +778,38 @@ class MainWindow(QMainWindow):
 
     def after_move(self, record) -> None:
         self.refresh()
+        # A cinematic move holds the visible turn boundary. The chess model
+        # has already advanced, but analysis and the next engine reply wait
+        # until the last walk or duel ends instead of overwriting it.
+        battle = self.battle_widget
+        if (battle is not None and self.stack.currentWidget() is battle
+                and battle.is_animating()):
+            self._battle_waiting_turn = True
+            return
         if self.game.is_over():
+            self._flush_battle_result()
+            return
+        self._continue_after_battle()
+
+    def _continue_after_battle(self) -> None:
+        """Run the normal post-move work once the stage is ready."""
+        if self.game.is_over():
+            self._flush_battle_result()
             return
         if self.analysis_running:
             self.start_analysis()
         self.maybe_engine_move()
+
+    def _on_battle_animation_finished(self) -> None:
+        """Release a deferred engine turn / result after the stage settles."""
+        if not self._battle_waiting_turn and self._battle_pending_result is None:
+            return
+        self._battle_waiting_turn = False
+        self.refresh()
+        if self._battle_pending_result is not None:
+            self._flush_battle_result()
+            return
+        self._continue_after_battle()
 
     def maybe_engine_move(self) -> None:
         if self.game.is_over():
@@ -766,6 +853,21 @@ class MainWindow(QMainWindow):
         self.status_label.setText(f"Engine error: {message}")
 
     def on_game_over(self, result: str, reason: str) -> None:
+        # Game.push announces checkmate before do_move() hands the record to
+        # the stage. Defer the dialog for a cinematic final capture, otherwise
+        # a modal result box hides the very duel that decided the game.
+        if self._battle_move_in_progress and self.training_session is None:
+            self._battle_pending_result = (result, reason)
+            return
+        self._show_game_over(result, reason)
+
+    def _flush_battle_result(self) -> None:
+        pending = self._battle_pending_result
+        self._battle_pending_result = None
+        if pending is not None:
+            self._show_game_over(*pending)
+
+    def _show_game_over(self, result: str, reason: str) -> None:
         self.sounds.play("win" if result != "0-1" else "lose")
         names = f"{self.game.players[chess.WHITE].name} vs {self.game.players[chess.BLACK].name}"
         text = f"{result}  ·  {reason}\n{names}"
@@ -791,7 +893,13 @@ class MainWindow(QMainWindow):
         self.board.set_board(board, last)
         self.board.last_move = last
         if self.battle_widget is not None:
-            self.battle_widget.sync_position(board)
+            # Do not clear a live walk/duel. Game.push emits refresh before
+            # do_move hands the record to the stage, hence the short explicit
+            # transaction flag as well as the widget's own animation guard.
+            battle_is_visible = self.stack.currentWidget() is self.battle_widget
+            if (not self._battle_move_in_progress
+                    and (not battle_is_visible or not self.battle_widget.is_animating())):
+                self.battle_widget.sync_position(board)
         sans = [r.san for r in self.game.records]
         comments = {i: r.comment for i, r in enumerate(self.game.records) if r.comment}
         self.move_list.set_moves(sans, comments)
@@ -848,6 +956,8 @@ class MainWindow(QMainWindow):
         self.material.set_captures(black_lost, white_lost, balance)
 
     def takeback(self) -> None:
+        self._battle_waiting_turn = False
+        self._battle_pending_result = None
         record = self.game.undo()
         if record is None:
             return
@@ -866,6 +976,8 @@ class MainWindow(QMainWindow):
         self.game.gameOver.emit(self.game.result, self.game.reason)
 
     def goto_ply(self, ply: int) -> None:
+        self._battle_waiting_turn = False
+        self._battle_pending_result = None
         self.game.goto_ply(ply)
         self.refresh()
 
@@ -1067,7 +1179,6 @@ class MainWindow(QMainWindow):
             self.training_panel.set_task(None)
             self.status_label.setText("Training finished")
             return
-        session = self.training_session
         self.training_panel.set_task(task)
         self.training_panel.clear_feedback()
         variant = "standard"
@@ -1121,10 +1232,11 @@ class MainWindow(QMainWindow):
         if not result.ok and not result.done:
             self.sounds.play("error")
             return
-        record = self.game.push(move)
+        record = self._push_with_battle_transaction(move)
         if record is not None:
             self._play_move_sound(record)
-            if self.battle_widget is not None:
+            if (self.battle_widget is not None
+                    and self.stack.currentWidget() is self.battle_widget):
                 self.battle_widget.play_move(record)
         if session.task and session.task.meta.get("blindfold"):
             self.blindfold_counter += 1
@@ -1171,10 +1283,11 @@ class MainWindow(QMainWindow):
         if self.game.is_over():
             return
         self._pending_reply = None
-        record = self.game.push(move)
+        record = self._push_with_battle_transaction(move)
         if record is not None:
             self._play_move_sound(record)
-            if self.battle_widget is not None:
+            if (self.battle_widget is not None
+                    and self.stack.currentWidget() is self.battle_widget):
                 self.battle_widget.play_move(record)
 
     def training_hint(self) -> None:
@@ -1271,6 +1384,8 @@ class MainWindow(QMainWindow):
             if not self._ensure_battle():
                 self.battle_action.setChecked(False)
                 return
+            for view in self.land_views.values():
+                view.set_game_active(False)
             self.stack.setCurrentWidget(self.battle_widget)
             self.battle_widget.sync_position(self.game.board)
         else:
@@ -1311,9 +1426,12 @@ class MainWindow(QMainWindow):
                 f"{exc}\n\nThe 2D board keeps all the game features.")
             return
         try:
-            self.battle_widget = BattleBoardWidget(self, self.settings)
+            self.battle_widget = BattleBoardWidget(self, self.settings, sounds=self.sounds)
             self.battle_widget.moveRequested.connect(self.on_human_move)
             self.battle_widget.glFailed.connect(self._battle_failed)
+            self.battle_widget.animationStarted.connect(self._on_battle_animation_started)
+            self.battle_widget.animationFinished.connect(self._on_battle_animation_finished)
+            self.battle_widget.duelAnnounced.connect(self._on_battle_duel_announced)
             self.stack.addWidget(self.battle_widget)
         except Exception as exc:
             self.battle_widget = None
@@ -1364,6 +1482,27 @@ class MainWindow(QMainWindow):
             "flat board. Every other feature is unaffected.\n\n"
             + "\n".join(tail[-6:]))
 
+    def _on_battle_animation_started(self, caption: str) -> None:
+        if caption:
+            self.status_label.setText("Battle stage — " + caption)
+
+    def _on_battle_duel_announced(self, caption: str) -> None:
+        # Keep the last duel legible in the normal status bar. An empty
+        # caption is emitted when the stage returns to the steady position.
+        if caption:
+            self.status_label.setText("Battle duel — " + caption)
+
+    def set_battle_animation(self, mode: str) -> None:
+        if mode not in ("Full stage", "Combat only", "Walks only", "Still board"):
+            return
+        self.settings["battle_animation"] = mode
+        # Preserve the historical key for downgrades that still read it.
+        self.settings["battle_captures"] = mode in ("Full stage", "Combat only")
+        self.save_settings()
+        if self.battle_widget is not None:
+            self.battle_widget.apply_settings(self.settings)
+        self.status_label.setText(f"Battle animation: {mode}")
+
     def set_gore(self, level: str) -> None:
         self.settings["battle_gore"] = level
         self.save_settings()
@@ -1381,31 +1520,63 @@ class MainWindow(QMainWindow):
     # the anarchy wing: Anarchess and Anarchchess
     # ------------------------------------------------------------------
     def show_anarchess(self) -> None:
-        self._ensure_anarchess()
-        if self.anarchess is None:
+        self._show_land_game("standard")
+
+    def show_anarchess_solo(self) -> None:
+        self._show_land_game("solo")
+
+    def show_anarcheckers(self) -> None:
+        self._show_land_game("checkers")
+
+    def _show_land_game(self, variant: str) -> None:
+        """Open one persistent, first-class land-game page."""
+        view = self._ensure_land_game(variant)
+        if view is None:
             return
-        self.stack.setCurrentWidget(self.anarchess)
-        self.status_label.setText(
-            "Anarchess - lay a tile, then settle, move or fight with a pawn")
+        # The three menu entries represent three games, not three resettable
+        # settings of one screen. Pause a hidden opponent and retain every
+        # board so returning to a game returns to its position.
+        for key, other in self.land_views.items():
+            other.set_game_active(key == variant)
+        self.stack.setCurrentWidget(view)
+        messages = {
+            "standard": "Anarchess — lay a tile, then settle, move or attack with a pawn",
+            "solo": "Anarchess SOLO — build both tribes toward the 192-point target",
+            "checkers": "Anarcheckers — jumps are compulsory and chains stay with one piece",
+        }
+        self.status_label.setText(messages.get(variant, messages["standard"]))
 
     def _ensure_anarchess(self) -> None:
-        if self.anarchess is not None:
-            return
+        """Compatibility helper for callers that mean standard Anarchess."""
+        self._ensure_land_game("standard")
+
+    def _ensure_land_game(self, variant: str):
+        variant = variant if variant in ("standard", "solo", "checkers") else "standard"
+        existing = self.land_views.get(variant)
+        if existing is not None:
+            return existing
         try:
             from ..anarchess.view import AnarchessView, default_config
         except Exception as exc:
             QMessageBox.warning(self, "Anarchess",
                                 f"Anarchess could not be started:\n{exc}")
-            return
+            return None
         try:
             view = AnarchessView(self)
-            view.start(default_config())
+            view.start(default_config(variant=variant))
+            # A page is built before it is shown. Keep a bot from taking an
+            # unseen opening turn until this entry is actually selected.
+            view.set_game_active(False)
             view.statusChanged.connect(self.status_label.setText)
             self.stack.addWidget(view)
-            self.anarchess = view
+            self.land_views[variant] = view
+            if variant == "standard":
+                self.anarchess = view
+            return view
         except Exception as exc:
             QMessageBox.warning(self, "Anarchess",
                                 f"Anarchess could not be started:\n{exc}")
+            return None
 
     def show_anarchy_rules(self) -> None:
         from .anarchy_dialog import AnarchyRulesBrowser
@@ -1518,17 +1689,38 @@ class MainWindow(QMainWindow):
 
     def import_pgn(self) -> None:
         path, _ = QFileDialog.getOpenFileName(self, "Import PGN", "", "PGN files (*.pgn)")
-        if not path:
-            return
-        with open(path) as fh:
-            text = fh.read()
+        if path:
+            self.open_pgn_file(path)
+
+    def open_pgn_file(self, path: str, *, report_errors: bool = True) -> bool:
+        """Load a PGN selected in the UI or delivered by a desktop launcher.
+
+        Keeping file-association startup on this same path makes a Windows
+        ``Open with TALOS`` action and the Linux desktop-entry ``%F`` behave
+        exactly like **Import PGN** rather than opening an empty application.
+        """
+        try:
+            with open(path, encoding="utf-8", errors="replace") as handle:
+                text = handle.read()
+        except OSError as exc:
+            message = f"Could not open {os.path.basename(path)}: {exc}"
+            self.status_label.setText(message)
+            if report_errors:
+                QMessageBox.warning(self, "Import PGN", message)
+            return False
         game = chess.pgn.read_game(_io.StringIO(text))
         if game is None:
-            QMessageBox.warning(self, "Import", "No game found in that file.")
-            return
+            message = f"No game found in {os.path.basename(path)}."
+            self.status_label.setText(message)
+            if report_errors:
+                QMessageBox.warning(self, "Import PGN", message)
+            return False
+        self._battle_waiting_turn = False
+        self._battle_pending_result = None
         self.game.load_pgn(str(game))
         self.refresh()
         self.status_label.setText(f"Imported {os.path.basename(path)}")
+        return True
 
     def browse_games(self) -> None:
         rows = self.db.execute("SELECT id, title, created, result FROM saved_games"

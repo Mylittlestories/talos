@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>TALOS — The Living Chess Studio</title>
-<meta name="description" content="A local chess studio in your browser: the TALOS engine, 112,000 Lucas Chess puzzles, Anarchess and Anarchchess. Installable, works offline.">
+<meta name="description" content="A local chess studio in your browser: the TALOS engine, Lucas Chess puzzles, Anarchess, SOLO and Anarcheckers. Installable, works offline.">
 <meta name="theme-color" content="#0e1015">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -18,26 +18,25 @@
 
 <header class="topbar">
   <div class="brand">
-    <!-- the real mark: the same file as the app icon, so the header cannot
-         drift away from what is on the taskbar or the home screen -->
-    <img class="mark" src="icons/talos-192.png" alt="" width="34" height="34"
-         decoding="async">
+    <img class="mark" src="icons/talos-192.png" alt="" width="34" height="34" decoding="async">
     <div class="brand-text">
       <strong>TALOS</strong>
       <span>The Living Chess Studio</span>
     </div>
   </div>
-  <nav class="tabs" role="tablist">
-    <button class="tab active" data-view="play">Play</button>
-    <button class="tab" data-view="train">Train</button>
-    <button class="tab" data-view="anarchess">Anarchess</button>
-    <button class="tab" data-view="rules">Rules</button>
+  <nav class="tabs" role="tablist" aria-label="TALOS sections">
+    <button class="tab active" data-view="play" role="tab" aria-selected="true">Play</button>
+    <button class="tab" data-view="train" role="tab" aria-selected="false">Train</button>
+    <button class="tab" data-view="anarchess" role="tab" aria-selected="false">Anarchess</button>
+    <button class="tab" data-view="solo" role="tab" aria-selected="false">SOLO</button>
+    <button class="tab" data-view="anarcheckers" role="tab" aria-selected="false">Anarcheckers</button>
+    <button class="tab" data-view="rules" role="tab" aria-selected="false">Rules</button>
   </nav>
 </header>
 
 <main>
   <!-- ---------------------------------------------------------------- play -->
-  <section class="view active" id="view-play">
+  <section class="view active" id="view-play" role="tabpanel">
     <div class="boardwrap">
       <div class="board" id="board" role="grid" aria-label="Chess board"></div>
       <div class="ranks" id="ranks" aria-hidden="true"></div>
@@ -68,6 +67,14 @@
           <select id="level"></select>
         </div>
         <div class="row">
+          <label for="think-time">Think time</label>
+          <select id="think-time">
+            <option value="quick">Quick — up to 0.7 s</option>
+            <option value="balanced">Balanced — up to 2 s</option>
+            <option value="deep">Deep — use the engine level budget</option>
+          </select>
+        </div>
+        <div class="row">
           <label for="side">You play</label>
           <select id="side">
             <option value="w">White</option>
@@ -76,7 +83,7 @@
           </select>
         </div>
         <div class="buttons">
-          <button id="btn-new">New game</button>
+          <button id="btn-new" class="primary">New game</button>
           <button id="btn-undo">Undo</button>
           <button id="btn-flip">Flip</button>
           <button id="btn-hint">Hint</button>
@@ -91,15 +98,14 @@
   </section>
 
   <!-- --------------------------------------------------------------- train -->
-  <section class="view" id="view-train">
+  <section class="view" id="view-train" role="tabpanel">
     <div class="boardwrap">
       <div class="board" id="tboard" role="grid" aria-label="Puzzle board"></div>
     </div>
     <aside class="side">
       <div class="card">
         <h3>Training set</h3>
-        <input id="set-search" type="search" placeholder="Search 182 sets…"
-               autocomplete="off">
+        <input id="set-search" type="search" placeholder="Search 182 sets…" autocomplete="off">
         <select id="set-picker" size="8"></select>
         <p class="dim" id="set-info">Loading sets…</p>
       </div>
@@ -118,87 +124,192 @@
       </div>
       <div class="card" id="learn-card">
         <h3>Your progress</h3>
-        <p class="dim" id="learn-summary">Answer a few and the coach starts
-          scheduling reviews.</p>
+        <p class="dim" id="learn-summary">Answer a few and the coach starts scheduling reviews.</p>
       </div>
     </aside>
   </section>
 
-  <!-- ----------------------------------------------------------- anarchess -->
-  <section class="view" id="view-anarchess">
-    <div class="boardwrap tall">
-      <canvas id="an-canvas" aria-label="Anarchess board"></canvas>
-      <div class="an-hint" id="an-hint">Lay a tile</div>
+  <!-- ---------------------------------------------------------- anarchess -->
+  <section class="view land-view" id="view-anarchess" role="tabpanel"
+           data-land-mode="standard" data-land-settings="anarchess">
+    <div class="land-stage">
+      <canvas class="land-canvas" data-land-canvas aria-label="Anarchess land" tabindex="0"></canvas>
+      <div class="land-toolbar" aria-label="Anarchess map controls">
+        <button type="button" data-land-zoom="out" title="Zoom out" aria-label="Zoom out">−</button>
+        <button type="button" data-land-zoom="reset" title="Reset zoom" aria-label="Reset zoom">100%</button>
+        <button type="button" data-land-zoom="in" title="Zoom in" aria-label="Zoom in">+</button>
+        <button type="button" data-land-center title="Centre the land">Centre</button>
+      </div>
+      <div class="an-hint" data-land-hint>Lay a tile</div>
     </div>
-    <aside class="side">
-      <div class="card">
-        <h3>The land before Chess</h3>
-        <p class="dim" id="an-status">A new game is starting…</p>
+    <aside class="side land-side">
+      <div class="card game-card">
+        <p class="game-kicker">TABLE GAME · 2–4 PLAYERS</p>
+        <h2>ANARCHESS</h2>
+        <p class="dim" data-land-status>A new game is starting…</p>
         <div class="row">
-          <label for="an-players">Players</label>
-          <select id="an-players">
-            <option value="2">2 (8 pawns each)</option>
-            <option value="3">3 (6 pawns each)</option>
-            <option value="4">4 (5 pawns each)</option>
-          </select>
+          <label>Players
+            <select data-land-players aria-label="Players">
+              <option value="2">2 — 8 pawns each</option>
+              <option value="3">3 — 6 pawns each</option>
+              <option value="4">4 — 5 pawns each</option>
+            </select>
+          </label>
         </div>
         <div class="row">
-          <label for="an-level">Opponents</label>
-          <select id="an-level">
-            <option value="1">Settler</option>
-            <option value="2" selected>Tribe</option>
-            <option value="3">Warlord</option>
-          </select>
+          <label>Opponent
+            <select data-land-level aria-label="Opponent strength"></select>
+          </label>
         </div>
+        <p class="field-note dim" data-land-opponent-note></p>
         <div class="row">
-          <label for="an-mode">Game</label>
-          <select id="an-mode">
-            <option value="standard">Two tribes</option>
-            <option value="solo">Solo — one player, target 192</option>
-            <option value="checkers">Anarcheckers — pieces jump</option>
-          </select>
-        </div>
-        <div class="row">
-          <label for="an-tiles">Tiles</label>
-          <select id="an-tiles">
-            <option value="16">16 of each colour</option>
-            <option value="24">24 of each colour</option>
-            <option value="32" selected>32 of each colour — the full land</option>
-          </select>
+          <label>Tile supply
+            <select data-land-tiles aria-label="Tiles per colour">
+              <option value="16">16 of each colour</option>
+              <option value="24">24 of each colour</option>
+              <option value="32">32 of each colour — full land</option>
+            </select>
+          </label>
         </div>
         <div class="buttons">
-          <button id="btn-annew">New game</button>
-          <button id="btn-anpass">Skip pawn action</button>
+          <button type="button" data-land-new class="primary">New Anarchess game</button>
+          <button type="button" data-land-pass>Skip pawn action</button>
         </div>
       </div>
       <div class="card">
         <h3>Tribes</h3>
-        <div id="an-players-list"></div>
+        <div data-land-list></div>
+      </div>
+      <div class="card game-rules">
+        <h3>Official quick play</h3>
+        <ol class="small dim">
+          <li>The die names a tile colour. The tribe of the other colour opens.</li>
+          <li>Lay the tile beside the land. A single neighbour must be the opposite colour.</li>
+          <li>Then optionally settle, move orthogonally, or attack diagonally with one pawn.</li>
+          <li>Own areas of at least two tiles; the largest area is taxed and reserve pawns cost points.</li>
+        </ol>
+      </div>
+    </aside>
+  </section>
+
+  <!-- --------------------------------------------------------------- SOLO -->
+  <section class="view land-view" id="view-solo" role="tabpanel"
+           data-land-mode="solo" data-land-settings="solo">
+    <div class="land-stage">
+      <canvas class="land-canvas" data-land-canvas aria-label="Anarchess SOLO land" tabindex="0"></canvas>
+      <div class="land-toolbar" aria-label="SOLO map controls">
+        <button type="button" data-land-zoom="out" title="Zoom out" aria-label="Zoom out">−</button>
+        <button type="button" data-land-zoom="reset" title="Reset zoom" aria-label="Reset zoom">100%</button>
+        <button type="button" data-land-zoom="in" title="Zoom in" aria-label="Zoom in">+</button>
+        <button type="button" data-land-center title="Centre the land">Centre</button>
+      </div>
+      <div class="an-hint" data-land-hint>Lay a tile</div>
+    </div>
+    <aside class="side land-side">
+      <div class="card game-card solo-card">
+        <p class="game-kicker">ONE PLAYER · TWO TRIBES</p>
+        <h2>ANARCHESS SOLO</h2>
+        <p class="dim" data-land-status>A new score challenge is starting…</p>
+        <div class="score-target"><span>Perfect-score target</span><b>192</b><span>points</span></div>
+        <div class="row">
+          <label>Tile supply
+            <select data-land-tiles aria-label="Tiles per colour">
+              <option value="16">16 of each colour</option>
+              <option value="24">24 of each colour</option>
+              <option value="32">32 of each colour — full challenge</option>
+            </select>
+          </label>
+        </div>
+        <div class="buttons">
+          <button type="button" data-land-new class="primary">New SOLO challenge</button>
+          <button type="button" data-land-pass>Pass (no pawn action)</button>
+        </div>
       </div>
       <div class="card">
-        <h3>How it works</h3>
+        <h3>Scorecard</h3>
+        <div data-land-list></div>
+      </div>
+      <div class="card game-rules">
+        <h3>Official SOLO priority</h3>
         <ol class="small dim">
-          <li>The die names a colour: that is the tile you must lay, and the
-              <em>other</em> colour plays it.</li>
-          <li>Then one pawn action, if you want one: settle onto the tile you
-              just laid, step, or attack across a diagonal.</li>
-          <li>Every <em>area</em> — two or more tiles of one colour touching
-              edge to edge — scores for whoever holds most of it.</li>
-          <li>A tile is worth 2 points, 3 if the area matches its owner's
-              colour, but only <b>1</b> in the largest area, which is taxed.
-              A pawn left in the reserve costs 6.</li>
+          <li>Lay the die-selected tile as in Anarchess.</li>
+          <li>Use a pawn of the <b>opposite</b> colour: settle first, otherwise attack, otherwise move.</li>
+          <li>The pawn action is required whenever one is available. Only a stranded turn can pass.</li>
+          <li>A tied area scores four per tile. Every unused pawn costs six points.</li>
+        </ol>
+      </div>
+    </aside>
+  </section>
+
+  <!-- ------------------------------------------------------- Anarcheckers -->
+  <section class="view land-view" id="view-anarcheckers" role="tabpanel"
+           data-land-mode="checkers" data-land-settings="anarcheckers">
+    <div class="land-stage">
+      <canvas class="land-canvas" data-land-canvas aria-label="Anarcheckers land" tabindex="0"></canvas>
+      <div class="land-toolbar" aria-label="Anarcheckers map controls">
+        <button type="button" data-land-zoom="out" title="Zoom out" aria-label="Zoom out">−</button>
+        <button type="button" data-land-zoom="reset" title="Reset zoom" aria-label="Reset zoom">100%</button>
+        <button type="button" data-land-zoom="in" title="Zoom in" aria-label="Zoom in">+</button>
+        <button type="button" data-land-center title="Centre the land">Centre</button>
+      </div>
+      <div class="an-hint" data-land-hint>Lay a tile</div>
+    </div>
+    <aside class="side land-side">
+      <div class="card game-card checkers-card">
+        <p class="game-kicker">TABLE GAME · JUMPS ARE COMPULSORY</p>
+        <h2>ANARCHECKERS</h2>
+        <p class="dim" data-land-status>A new game is starting…</p>
+        <div class="row">
+          <label>Players
+            <select data-land-players aria-label="Players">
+              <option value="2">2 — 8 pieces each</option>
+              <option value="3">3 — 6 pieces each</option>
+              <option value="4">4 — 5 pieces each</option>
+            </select>
+          </label>
+        </div>
+        <div class="row">
+          <label>Opponent
+            <select data-land-level aria-label="Opponent strength"></select>
+          </label>
+        </div>
+        <p class="field-note dim" data-land-opponent-note></p>
+        <div class="row">
+          <label>Tile supply
+            <select data-land-tiles aria-label="Tiles per colour">
+              <option value="16">16 of each colour</option>
+              <option value="24">24 of each colour</option>
+              <option value="32">32 of each colour — full land</option>
+            </select>
+          </label>
+        </div>
+        <div class="buttons">
+          <button type="button" data-land-new class="primary">New Anarcheckers game</button>
+          <button type="button" data-land-pass>Skip pawn action</button>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Tribes</h3>
+        <div data-land-list></div>
+      </div>
+      <div class="card game-rules">
+        <h3>Official quick play</h3>
+        <ol class="small dim">
+          <li>Tile placement and scoring are those of Anarchess.</li>
+          <li>Pieces move diagonally to an empty adjacent tile.</li>
+          <li>Jump diagonally over an adjacent enemy to an empty tile beyond it.</li>
+          <li>If a jump exists, take it. If it opens another jump, the <b>same piece</b> must continue.</li>
         </ol>
       </div>
     </aside>
   </section>
 
   <!-- --------------------------------------------------------------- rules -->
-  <section class="view" id="view-rules">
+  <section class="view" id="view-rules" role="tabpanel">
     <div class="prose">
       <h2>Anarchchess</h2>
-      <p class="lead">The house rules the community plays, collected from
-        r/AnarchyChess, anarchychess.org and the Anarchchess bots. Every rule
-        is a switch: turn it off and it simply does not exist.</p>
+      <p class="lead">The house rules the community plays, collected from r/AnarchyChess,
+        anarchychess.org and the Anarchchess bots. Every rule is a switch: turn it off and it simply does not exist.</p>
       <div class="presets">
         <button id="preset-curated">Anarchchess (curated)</button>
         <button id="preset-anarchy">Full anarchy</button>
@@ -206,24 +317,21 @@
       </div>
       <div id="rule-list" class="rules"></div>
 
-      <h2>Anarchess</h2>
-      <p>An implementation of the published game by Dimitris Grammenos
-        (FORTH). The die chooses the tile colour; the player of the opposite
-        colour opens, then every turn lays a tile and may use one pawn action.
-        In SOLO the prescribed pawn action is required when one is available.
-        Areas of two or more same-coloured tiles score for whoever holds the
-        most pawns. Choose the standard table, the one-player 192-point
-        <em>SOLO</em> challenge, or jump-and-chain-capture
-        <em>Anarcheckers</em> in the Anarchess tab.</p>
+      <h2>The three land games</h2>
+      <p>An independent implementation of Dimitris Grammenos’ published games (FORTH).
+        <b>Anarchess</b>, its one-player <b>SOLO</b> score challenge, and jump-and-chain-capture
+        <b>Anarcheckers</b> are separate game entries—not modes attached to an Anarchess session.
+        They share the die, land and area-scoring foundations while retaining their own official turn rules.</p>
       <div class="presets">
-        <button id="an-open">Open Anarchess</button>
+        <button type="button" data-open-land="anarchess">Open Anarchess</button>
+        <button type="button" data-open-land="solo">Open SOLO</button>
+        <button type="button" data-open-land="anarcheckers">Open Anarcheckers</button>
       </div>
 
       <h2>About this build</h2>
-      <p>The engine, the Anarchess rules and the Anarchchess rules running in
-        this page are the <em>same Python files</em> the desktop application
-        uses, executed by Pyodide. Nothing is rewritten for the browser, and
-        after the first visit everything is cached: it works on a plane.</p>
+      <p>The chess engine, land-game rules and Anarchchess rules running in this page are the
+        <em>same Python files</em> as the desktop application, executed by Pyodide. Nothing is rewritten
+        for the browser, and after the first visit everything is cached: it works on a plane.</p>
       <p class="dim" id="version-line"></p>
     </div>
   </section>
@@ -233,8 +341,7 @@
   <div class="loader-inner">
     <div class="spinner"></div>
     <p id="loader-text">Starting the engine…</p>
-    <p class="dim small" id="loader-sub">Loading Python (about 10 MB, cached
-      after the first visit)</p>
+    <p class="dim small" id="loader-sub">Loading Python (about 10 MB, cached after the first visit)</p>
   </div>
 </div>
 

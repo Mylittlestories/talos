@@ -14,9 +14,9 @@
       Battle Chess stage where the victims lose their heads.
     </p>
     <p>
-      It also ships an implementation of Anarchess by Dimitris Grammenos,
-      including its SOLO and Anarcheckers variants, and Anarchchess, the
-      community's house rules as a real playable variant.
+      It also ships independent Anarchess, Anarchess SOLO and Anarcheckers
+      land-game entries based on the published games by Dimitris Grammenos,
+      plus Anarchchess, the community's house rules as a real playable variant.
     </p>
   </description>
   <launchable type="desktop-id">talos.desktop</launchable>

@@ -89,6 +89,25 @@ jobs:
           echo "database: $db ($(du -h "$db" | cut -f1))"
           du -sh dist/talos
 
+      - name: Frozen app starts and provisions player data
+        shell: bash
+        run: |
+          player_data=$(mktemp -d)
+          set +e
+          QT_QPA_PLATFORM=offscreen TALOS_DATA_DIR="$player_data" \
+            timeout --signal=TERM 8s dist/talos/talos > frozen-app.log 2>&1
+          result=$?
+          set -e
+          # The event loop should still be alive when timeout ends it. A real
+          # startup exception exits with another status and prints the log.
+          if [ "$result" -ne 124 ]; then
+            cat frozen-app.log
+            echo "Frozen TALOS exited unexpectedly ($result)" >&2
+            exit 1
+          fi
+          test -s "$player_data/lucas.db"
+          test -s "$player_data/settings.json"
+
   web:
     name: Browser edition
     runs-on: ubuntu-latest
@@ -120,3 +139,35 @@ jobs:
 
       - name: The page must boot and play
         run: node tools/web_dom_check.mjs
+
+  android:
+    name: Android debug APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+      - uses: android-actions/setup-android@v3
+      - name: Install the Android 35 build platform
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - name: Build and inspect the native APK
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install chess
+          npm ci
+          npm run android:debug
+          (cd android && ./gradlew --no-daemon :app:testDebugUnitTest)
+          test -s release/talos-android-*-debug.apk
+          unzip -t release/talos-android-*-debug.apk >/dev/null

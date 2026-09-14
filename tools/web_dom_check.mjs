@@ -43,16 +43,40 @@ const html = readFileSync(join(WEB, "index.html"), "utf8");
 const dom = new JSDOM(html, { url: "http://localhost:8080/", pretendToBeVisual: true });
 const win = dom.window;
 
-// jsdom has no canvas: give it a 2D context that swallows every call
+// jsdom has no canvas: give it a 2D context that swallows every call. The
+// land renderer intentionally uses gradients as part of its canvas artwork.
+const fakeGradient = { addColorStop() {} };
 const fakeContext = new Proxy({}, {
-  get: (target, key) => (key in target ? target[key] : () => {}),
+  get: (target, key) => {
+    if (key === "createLinearGradient" || key === "createRadialGradient") {
+      return () => fakeGradient;
+    }
+    return key in target ? target[key] : () => {};
+  },
   set: (target, key, value) => { target[key] = value; return true; },
 });
 win.HTMLCanvasElement.prototype.getContext = () => fakeContext;
+// Give every map a believable CSS rectangle: jsdom has no layout engine, but
+// controller hit testing and DPR sizing deliberately depend on visible pixels.
+Object.defineProperties(win.HTMLCanvasElement.prototype, {
+  clientWidth: { configurable: true, get: () => 640 },
+  clientHeight: { configurable: true, get: () => 420 },
+});
+class FakeResizeObserver {
+  constructor(callback) { this.callback = callback; }
+  observe(target) {
+    this.callback([{ target, contentRect: {
+      width: target.clientWidth || 1, height: target.clientHeight || 1,
+    } }]);
+  }
+  disconnect() {}
+}
+win.ResizeObserver = FakeResizeObserver;
 
 for (const key of ["window", "document", "navigator", "localStorage", "location",
   "history", "HTMLElement", "Element", "Node", "Event", "CustomEvent", "MouseEvent",
-  "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "DOMParser"]) {
+  "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "DOMParser",
+  "ResizeObserver"]) {
   if (win[key] !== undefined) globalThis[key] = win[key];
 }
 globalThis.window = win;
@@ -127,8 +151,10 @@ const $ = (id) => win.document.getElementById(id);
 console.log("boot");
 check(!!app.info, "the engine booted", app.info && "Python " + app.info.python);
 check($("loader").classList.contains("hidden"), "the loader goes away");
-check($("level").options.length === 12, "the level list is filled",
+check($("level").options.length === 15, "the level list is filled",
   $("level").options.length + " levels");
+check($("think-time").options.length === 3,
+  "the chess thinking-budget selector is filled");
 check($("rule-list").children.length === 15, "the rule switches are rendered",
   $("rule-list").children.length + " rules");
 check(win.document.querySelectorAll("#board .sq").length === 64, "the board has 64 squares");
@@ -138,7 +164,33 @@ check($("version-line").textContent.startsWith("TALOS"), "the version line",
   $("version-line").textContent.slice(0, 58));
 
 console.log("\nplay");
-await app.views.play.humanMove("e2e4");
+const play = app.views.play;
+$("level").value = $("level").options[$("level").options.length - 1].value;
+$("level").dispatchEvent(new win.Event("change", { bubbles: true }));
+$("think-time").value = "quick";
+$("think-time").dispatchEvent(new win.Event("change", { bubbles: true }));
+const quickBudget = play.thinkBudget();
+$("think-time").value = "deep";
+$("think-time").dispatchEvent(new win.Event("change", { bubbles: true }));
+check(app.settings.think === "deep" && play.thinkBudget() > quickBudget,
+  "the selected chess think-time changes the engine budget");
+// Restore a fast profile, then observe the real worker request—not only the
+// UI helper—to protect the engine_move wiring from regressing to a fixed time.
+$("level").value = "Club";
+$("level").dispatchEvent(new win.Event("change", { bubbles: true }));
+$("think-time").value = "quick";
+$("think-time").dispatchEvent(new win.Event("change", { bubbles: true }));
+let requestedBudget = null;
+const rawEngineJson = app.engine.json;
+const callEngineJson = rawEngineJson.bind(app.engine);
+app.engine.json = async (fn, args) => {
+  if (fn === "analyse") requestedBudget = args[2];
+  return callEngineJson(fn, args);
+};
+await play.humanMove("e2e4");
+app.engine.json = rawEngineJson;
+check(requestedBudget === play.thinkBudget(),
+  "the actual chess-engine request receives the selected budget", String(requestedBudget));
 check(app.views.play.san.length === 2, "my move and the engine's reply",
   app.views.play.san.join(" "));
 app.set("side", "b");
@@ -181,7 +233,10 @@ check(Number($("t-solved").textContent) + Number($("t-failed").textContent) >= 0
 console.log("\nanarchess");
 await app.show("anarchess");
 const an = app.views.anarchess;
-check(!!an.state, "a game was created");
+check(!!an.state && !an.state.rules.solo && !an.state.rules.checkers,
+  "the original Anarchess page starts its own game");
+check($("view-anarchess").classList.contains("active") && !$("an-mode"),
+  "Anarchess has a dedicated page instead of an attached mode switch");
 // The view's game may already be under way, so the opening is asserted on a
 // pristine state asked straight from the engine.
 const fresh = await an.app.engine.json("anarchess_new",
@@ -192,17 +247,17 @@ const openingLight = fresh.tiles.filter((t) => t[2] === 1).length;
 check(openingLight === 2, "two of them light", openingLight + " light");
 check(fresh.drawn === true || fresh.drawn === false,
   "the die has already named a colour");
-// the die sends the opposite colour first, so let the bots have their turn
-// before the human is asked to click anything
+// The die sends the opposite colour first, so let the bots have their turn
+// before the human is asked to click anything.
 await an.runBots();
-const clickCell = (cx, cy) => an._click({
-  clientX: an.ox + (cx + 0.5) * an.cell,
-  clientY: an.oy + (cy + 0.5) * an.cell,
+const clickCell = async (view, cx, cy) => view._click({
+  clientX: view.ox + (cx + 0.5) * view.cell,
+  clientY: view.oy + (cy + 0.5) * view.cell,
 });
 const before = an.state.tiles.length;
 const spot = (an.legal.tiles || [])[0];
 check(!!spot, "the human has a legal tile to lay");
-await clickCell(spot.x, spot.y);
+await clickCell(an, spot.x, spot.y);
 check(an.state.tiles.length === before + 1, "clicking lays a tile",
   an.state.tiles.length + " tiles");
 const laid = an.state.tiles.find((t) => t[0] === spot.x && t[1] === spot.y);
@@ -213,59 +268,116 @@ await an.pass();
 check(an.state.tiles.length >= before + 2, "the bots answer",
   an.state.tiles.length + " tiles");
 check(an.state.current === 0, "the turn comes back round");
-check($("an-players-list").textContent.includes("Light"), "the tribe panel is filled");
+check(an.el.list.textContent.includes("Light"),
+  "the original game tribe panel is filled");
 
-console.log("\nanarchess solo");
-$("an-players").value = "4";
-$("an-mode").value = "solo";
-await an.newGame();
-check(an.state.rules.solo && an.state.players === 2,
-  "SOLO normalises to two tribes", an.state.players + " tribes");
-check($("an-players").disabled && $("an-level").disabled,
-  "SOLO disables table-only controls");
-const soloBefore = an.state.tiles.length;
-const soloSpot = (an.legal.tiles || [])[0];
+console.log("\nanarchess SOLO");
+await app.show("solo");
+const solo = app.views.solo;
+check(!!solo.state && solo.state.rules.solo && solo.state.players === 2,
+  "SOLO has its own two-tribe game", solo.state.players + " tribes");
+check(solo.el.players === null && solo.el.level === null,
+  "SOLO removes table-only controls");
+check($("view-solo").classList.contains("active") && solo.root.querySelector("h2").textContent.includes("SOLO"),
+  "SOLO has its own page and title");
+const soloBefore = solo.state.tiles.length;
+const soloSpot = (solo.legal.tiles || [])[0];
 check(!!soloSpot, "the solo player has a tile to lay");
-await clickCell(soloSpot.x, soloSpot.y);
-check(an.state.tiles.length === soloBefore + 1 && an.state.placed,
-  "the solo player can act on either turn", an.state.tiles.length + " tiles");
-check(Number.isInteger(an.state.pawn_player),
-  "the pawn-action tribe is carried in the snapshot", String(an.state.pawn_player));
+await clickCell(solo, soloSpot.x, soloSpot.y);
+check(solo.state.tiles.length === soloBefore + 1 && solo.state.placed,
+  "the solo player can act on either turn", solo.state.tiles.length + " tiles");
+check(Number.isInteger(solo.state.pawn_player),
+  "the pawn-action tribe is carried in the snapshot", String(solo.state.pawn_player));
 // The turn owner can be Light while the SOLO pawn actor is Dark. Make that
 // state explicit and verify the controller selects the Dark pawn, not a
 // hard-coded Light one; applying the second click is outside this UI check.
-const savedSoloState = an.state;
-const savedSoloLegal = an.legal;
-an.state = { current: 0, pawn_player: 1, rules: { solo: true },
-  pawns: [[3, 3, 1]], tiles: [], areas: [], finished: false };
-an.legal = { tiles: [], pawns: [{ kind: "move", x: 4, y: 3, fx: 3, fy: 3 }], can_pass: false };
-an.source = null;
-an.ox = 0;
-an.oy = 0;
-an.cell = 1;
-await an._click({ clientX: 3.5, clientY: 3.5 });
-check(Array.isArray(an.source) && an.source[0] === 3 && an.source[1] === 3,
+const savedSoloState = solo.state;
+const savedSoloLegal = solo.legal;
+solo.state = { current: 0, pawn_player: 1, placed: true, rules: { solo: true },
+  names: ["Light", "Dark"], pawns: [[3, 3, 1]], tiles: [], areas: [], finished: false };
+solo.legal = { tiles: [], pawns: [{ kind: "move", x: 4, y: 3, fx: 3, fy: 3 }], can_pass: false };
+solo.source = null;
+solo.ox = 0;
+solo.oy = 0;
+solo.cell = 1;
+await solo._click({ clientX: 3.5, clientY: 3.5 });
+check(Array.isArray(solo.source) && solo.source[0] === 3 && solo.source[1] === 3,
   "the solo player can select the other tribe's pawn");
-an.state = savedSoloState;
-an.legal = savedSoloLegal;
-an.source = null;
+solo.state = savedSoloState;
+solo.legal = savedSoloLegal;
+solo.source = null;
 
-const savedApply = an.apply;
+const savedApply = solo.apply;
 let passedSoloAction = null;
-an.state = { current: 0, rules: { solo: true }, names: ["Light", "Dark"],
+solo.state = { current: 0, placed: true, rules: { solo: true }, names: ["Light", "Dark"],
   pawns: [], reserve: [0, 0], scores: [0, 0], final: null,
   supply: { light: 0, dark: 0 }, left: 0, status: "No pawn action", finished: false };
-an.legal = { tiles: [], pawns: [], can_pass: true };
-an._panel();
-an.apply = async (action) => { passedSoloAction = action; return true; };
-await an.pass();
-check(!$("btn-anpass").disabled && $("btn-anpass").textContent.includes("Pass")
+solo.legal = { tiles: [], pawns: [], can_pass: true };
+solo._panel();
+solo.apply = async (action) => { passedSoloAction = action; return true; };
+await solo.pass();
+check(!solo.el.pass.disabled && solo.el.pass.textContent.includes("Pass")
   && passedSoloAction && passedSoloAction.kind === "pass",
-"a stranded solo player is offered a pass");
-an.apply = savedApply;
-an.state = savedSoloState;
-an.legal = savedSoloLegal;
-an.source = null;
+  "a stranded solo player is offered a pass");
+solo.apply = savedApply;
+solo.state = savedSoloState;
+solo.legal = savedSoloLegal;
+solo.source = null;
+
+console.log("\nanarcheckers");
+await app.show("anarcheckers");
+const checkers = app.views.anarcheckers;
+check(!!checkers.state && checkers.state.rules.checkers && !checkers.state.rules.solo,
+  "Anarcheckers has its own game rules");
+check($("view-anarcheckers").classList.contains("active")
+  && checkers.root.querySelector("h2").textContent.toLowerCase().includes("anarcheckers"),
+  "Anarcheckers has its own page and title");
+const chainSnapshot = {
+  players: 2, rules: { checkers: true, tiles_per_colour: 16 }, names: ["Light", "Dark"],
+  tiles: [[0, 0, 1], [1, 1, 0], [2, 2, 1], [3, 3, 0], [4, 4, 1],
+          [5, 1, 1], [6, 2, 0], [7, 3, 1]],
+  pawns: [[0, 0, 0], [1, 1, 1], [3, 3, 1], [5, 1, 0], [6, 2, 1]],
+  supply: { light: 4, dark: 4 }, reserve: [7, 8], current: 0, turn: 1,
+  placed: true, last_tile: [0, 0], used: false, finished: false,
+};
+const firstChain = await checkers.app.engine.json("anarchess_apply",
+  [JSON.stringify(chainSnapshot), JSON.stringify({ kind: "attack", fx: 0, fy: 0, x: 2, y: 2 })]);
+const chainedLegal = await checkers.app.engine.json("anarchess_legal",
+  [JSON.stringify(firstChain.state)]);
+const hijackedChain = await checkers.app.engine.json("anarchess_apply",
+  [JSON.stringify(firstChain.state), JSON.stringify({ kind: "attack", fx: 5, fy: 1, x: 7, y: 3 })]);
+check(firstChain.ok && JSON.stringify(firstChain.state.chain) === JSON.stringify([2, 2])
+  && chainedLegal.pawns.length === 1 && chainedLegal.pawns[0].fx === 2
+  && !hijackedChain.ok,
+  "Anarcheckers keeps compulsory chains with the original pawn");
+
+console.log("\nresponsive graphics");
+check(win.document.querySelectorAll("#board svg.piece").length === 32,
+  "the chessboard uses scalable SVG piece geometry");
+const map = an.canvas;
+Object.defineProperties(map, {
+  clientWidth: { configurable: true, get: () => 640 },
+  clientHeight: { configurable: true, get: () => 420 },
+});
+Object.defineProperty(win, "devicePixelRatio", { configurable: true, value: 2 });
+globalThis.devicePixelRatio = 2;
+an.draw();
+check(map.width === 1280 && map.height === 840,
+  "land artwork uses a DPR-aware canvas backing store", map.width + "×" + map.height);
+// Zooming at a pointer position must retain the map cell under it. This is
+// distinct from merely changing canvas size: a wrong camera sign makes art
+// visibly jump away from the user's cursor at every zoom step.
+const zoomX = 510;
+const zoomY = 94;
+const beforeZoomWorld = [(zoomX - an.ox) / an.cell, (zoomY - an.oy) / an.cell];
+an.zoomAt(1.2, zoomX, zoomY);
+const afterZoomWorld = [(zoomX - an.ox) / an.cell, (zoomY - an.oy) / an.cell];
+check(Math.abs(beforeZoomWorld[0] - afterZoomWorld[0]) < 1e-9
+  && Math.abs(beforeZoomWorld[1] - afterZoomWorld[1]) < 1e-9,
+"map zoom stays anchored under the pointer");
+an.resetCamera();
+Object.defineProperty(win, "devicePixelRatio", { configurable: true, value: 1 });
+globalThis.devicePixelRatio = 1;
 
 console.log("\nrules");
 await app.show("rules");

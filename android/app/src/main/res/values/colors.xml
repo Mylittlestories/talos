@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="colorPrimary">#151A28</color>
+    <color name="colorPrimaryDark">#090C14</color>
+    <color name="colorAccent">#F0B429</color>
+    <color name="talos_background">#0E1015</color>
+</resources>

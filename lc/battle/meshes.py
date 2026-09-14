@@ -279,7 +279,6 @@ def board_mesh(bevel: float = 0.06, frame: float = 0.55) -> Mesh:
     """The playing surface plus the surrounding frame."""
     mesh = Mesh()
     half = 4.0
-    y = 0.0
     # frame
     outer = half + frame
     mesh.add_quad((-outer, -0.35, -outer), (outer, -0.35, -outer),
@@ -298,6 +297,19 @@ def board_mesh(bevel: float = 0.06, frame: float = 0.55) -> Mesh:
                           (x0 + 1 - inset, 0.0, z0 + 1 - inset),
                           (x0 + 1 - inset, 0.0, z0 + inset))
     return mesh
+
+
+def arena_mesh() -> Mesh:
+    """A broad, stepped stone plinth beneath the board.
+
+    It is intentionally generic fantasy scenery, generated with the rest of
+    the TALOS stage rather than copied from any historical chess game. The
+    shallow top leaves the board's wooden frame proud of the floor.
+    """
+    return lathe([
+        (0.0, -0.68), (8.30, -0.68), (8.55, -0.61), (8.55, -0.49),
+        (8.18, -0.40), (7.35, -0.37), (0.0, -0.37),
+    ], segments=64, close_bottom=True, close_top=False)
 
 
 def square_overlay_mesh() -> Mesh:

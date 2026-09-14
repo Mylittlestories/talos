@@ -1,7 +1,8 @@
-"""New-game dialog for Anarchess."""
+"""Dedicated new-game dialogs for Anarchess, SOLO, and Anarcheckers."""
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Dict, List, Optional
 
 from PyQt6.QtWidgets import (QCheckBox, QComboBox, QDialog, QDialogButtonBox,
@@ -12,15 +13,45 @@ from .ai import LEVELS
 from .rules import PAWNS_PER_PLAYER, PLAYER_NAMES, AnarchessRules
 
 
+_VARIANTS = {
+    "standard": ("New Anarchess game", "Anarchess", "Build and hold the land with two to four tribes."),
+    "solo": ("New Anarchess SOLO challenge", "Anarchess SOLO",
+             "A one-player, two-tribe score challenge. Target: 192 points."),
+    "checkers": ("New Anarcheckers game", "Anarcheckers",
+                 "The stand-alone jumping and chain-capture variant."),
+}
+
+
+def _variant_for(rules: AnarchessRules) -> str:
+    if rules.solo:
+        return "solo"
+    if rules.checkers:
+        return "checkers"
+    return "standard"
+
+
 class AnarchessDialog(QDialog):
+    """Configure one named land game, never a mode attached to another one."""
+
     def __init__(self, parent=None, players: int = 2,
-                 rules: Optional[AnarchessRules] = None):
+                 rules: Optional[AnarchessRules] = None,
+                 variant: Optional[str] = None):
         super().__init__(parent)
-        self.setWindowTitle("New Anarchess game")
+        base = rules or AnarchessRules()
+        self.variant = variant or _variant_for(base)
+        if self.variant not in _VARIANTS:
+            self.variant = "standard"
+        # Do not mutate the rules of the running game behind the dialog.
+        rules = replace(base, solo=self.variant == "solo",
+                        checkers=self.variant == "checkers")
+        title, heading, subtitle = _VARIANTS[self.variant]
+        self.setWindowTitle(title)
         self.setModal(True)
-        rules = rules or AnarchessRules()
 
         layout = QVBoxLayout(self)
+        heading_label = QLabel(f"<b>{heading}</b><br><span style='color:#98a1b5'>{subtitle}</span>")
+        heading_label.setWordWrap(True)
+        layout.addWidget(heading_label)
 
         setup = QGroupBox("Table")
         form = QVBoxLayout(setup)
@@ -29,17 +60,17 @@ class AnarchessDialog(QDialog):
         self.players = QComboBox()
         for n in (2, 3, 4):
             self.players.addItem(f"{n} players ({PAWNS_PER_PLAYER[n]} pawns each)", n)
-        self.players.setCurrentIndex(max(0, min(3, players - 2)))
+        self.players.setCurrentIndex(max(0, min(2, players - 2)))
         self.players.currentIndexChanged.connect(self._sync)
         row.addWidget(self.players, 1)
         form.addLayout(row)
 
         row = QHBoxLayout()
-        row.addWidget(QLabel("Opponents"))
+        row.addWidget(QLabel("Opponent"))
         self.level = QComboBox()
         for name, tip in LEVELS:
             self.level.addItem(name, tip)
-        self.level.setCurrentIndex(1)
+        self.level.setCurrentIndex(min(1, self.level.count() - 1))
         row.addWidget(self.level, 1)
         form.addLayout(row)
         layout.addWidget(setup)
@@ -49,27 +80,17 @@ class AnarchessDialog(QDialog):
         self.seat_combos: List[QComboBox] = []
         layout.addWidget(self.seats_box)
 
-        opts = QGroupBox("Rules")
+        opts = QGroupBox("Official rules")
         opts_form = QFormLayout(opts)
 
         self.tile_count = QComboBox()
-        for count, label in ((16, "16 of each colour - a short game"),
+        for count, label in ((16, "16 of each colour — a short game"),
                              (24, "24 of each colour"),
-                             (32, "32 of each colour - the full land")):
+                             (32, "32 of each colour — the full land")):
             self.tile_count.addItem(label, count)
         self.tile_count.setCurrentIndex(
             max(0, self.tile_count.findData(rules.tiles_per_colour)))
         opts_form.addRow("Tiles", self.tile_count)
-
-        self.mode = QComboBox()
-        self.mode.addItem("Two tribes", "standard")
-        self.mode.addItem("Solo - one player, target 192", "solo")
-        self.mode.addItem("Anarcheckers - pieces jump", "checkers")
-        self.mode.setCurrentIndex(
-            self.mode.findData("solo" if rules.solo else
-                               ("checkers" if rules.checkers else "standard")))
-        self.mode.currentIndexChanged.connect(self._sync)
-        opts_form.addRow("Game", self.mode)
 
         self.single_touch = QCheckBox(
             "A tile touching one other must be the opposite colour")
@@ -79,8 +100,7 @@ class AnarchessDialog(QDialog):
         self.protect_last.setChecked(rules.protect_last_move)
         self.tax = QCheckBox("The largest area is taxed to one point a tile")
         self.tax.setChecked(rules.tax_largest_area)
-        self.bonus = QCheckBox(
-            "An area matching its owner's colour scores three a tile")
+        self.bonus = QCheckBox("An area matching its owner's colour scores three a tile")
         self.bonus.setChecked(rules.same_colour_bonus)
         self.captives = QCheckBox("Captured pawns return to their reserve")
         self.captives.setChecked(rules.captives_return)
@@ -105,11 +125,9 @@ class AnarchessDialog(QDialog):
 
     # ------------------------------------------------------------------
     def _sync(self) -> None:
-        # SOLO is one player playing the two original tribes, not a 2–4 player
-        # table with all seats marked human.  Pin the dialog to two tribes as
-        # soon as it is selected; config() repeats that guard for callers that
-        # set widgets programmatically.
-        solo = self.mode.currentData() == "solo"
+        # SOLO is one person controlling the two original tribes. It is not a
+        # two-to-four-player table with computer seats disabled after the fact.
+        solo = self.variant == "solo"
         if solo and self.players.currentData() != 2:
             self.players.blockSignals(True)
             self.players.setCurrentIndex(self.players.findData(2))
@@ -135,7 +153,7 @@ class AnarchessDialog(QDialog):
 
     # ------------------------------------------------------------------
     def config(self) -> Dict:
-        solo = self.mode.currentData() == "solo"
+        solo = self.variant == "solo"
         players = 2 if solo else self.players.currentData()
         seats = (["human"] * players if solo
                  else [c.currentData() for c in self.seat_combos][:players])
@@ -149,7 +167,7 @@ class AnarchessDialog(QDialog):
             "rules": AnarchessRules(
                 tiles_per_colour=self.tile_count.currentData(),
                 solo=solo,
-                checkers=self.mode.currentData() == "checkers",
+                checkers=self.variant == "checkers",
                 single_touch_opposite=self.single_touch.isChecked(),
                 protect_last_move=self.protect_last.isChecked(),
                 tax_largest_area=self.tax.isChecked(),

@@ -9,13 +9,16 @@ misbehaves, fix it, add a check to the self test.
 ```bash
 python3 -m pip install -r requirements.txt
 python run.py                 # the app
-python tools/selftest.py      # 100 headless checks, no display needed
+python tools/selftest.py      # 139 headless checks, no display needed
 python tools/bench.py --count 150 --ms 400   # engine strength on real puzzles
 
-python tools/build_web.py     # build the browser + Android edition
-npm install --no-save --no-package-lock pyodide@0.27.7
-node tools/web_smoke.mjs      # boots the web payload and plays it (82 checks)
-node tools/web_dom_check.mjs  # boots the real page in a DOM and plays it (33 checks)
+python tools/build_web.py     # build the shared browser payload
+npm install --no-save --no-package-lock pyodide@0.27.7 jsdom
+node tools/web_smoke.mjs      # boots the web payload and plays it
+node tools/web_dom_check.mjs  # boots the real page in a DOM and plays it
+npm ci                         # pinned Capacitor tooling for the native shell
+python -m pip install chess    # minimal Python dependency for Android/web payloads
+npm run android:debug          # rebuilds web assets and creates an installable APK
 python tools/make_deck.py     # rebuild presentation/index.html
 python tools/make_icon.py     # rebuild the icon set in assets/
 ```
@@ -25,9 +28,9 @@ installs them on Debian/Ubuntu.
 
 ## Ground rules
 
-* **Everything stays local.** No accounts, no telemetry, no network calls
-  except the two the user asks for: the Stockfish installer and the opening
-  database import.
+* **Everything stays local.** No accounts and no telemetry. Desktop downloads
+  happen only when the user asks for Stockfish or an opening-data import; the
+  browser and Android shell fetch their pinned Pyodide runtime on first boot.
 * **Nothing is downloaded to be drawn.** Pieces, icons and sounds are
   generated at run time (Qt paths, inline SVG, synthesised audio). If a change
   needs an asset, generate it.
@@ -56,9 +59,10 @@ installs them on Debian/Ubuntu.
 | `lc/battle/` | 3D Battle Chess: meshes, physics, choreography, gore |
 | `lc/training/` | the 14 sessions, their panel, and the learning model |
 | `lc/data/` | Lucas importer, Stockfish installer, opening explorer |
-| `web/` | the browser/PWA edition (runs the Python core under Pyodide) |
+| `web/` | browser payload (runs the copied Python core under Pyodide) |
+| `android/` | tracked Capacitor/Gradle native shell that packages `web/` as an APK |
 | `presentation/` | the generated deck, also the Pages landing page |
-| `packaging/` | PyInstaller spec, desktop file, installers |
+| `packaging/` | PyInstaller spec, desktop installers and Android signing helpers |
 | `tools/` | self test, benchmark, icon generator, web/site builders |
 
 ## Style
@@ -94,10 +98,13 @@ automatically rather than shipped blank.
 1. Move `[Unreleased]` into a version section in `CHANGELOG.md`.
 2. Bump `APP_VERSION` in `lc/__init__.py`.
 3. `git tag -a vX.Y.Z -m "TALOS X.Y.Z" && git push origin vX.Y.Z`.
-4. CI builds the Windows, Linux, macOS and browser bundles, deploys the Pages
-   site and opens a **draft** release with the changelog section as its body
-   and `SHA256SUMS.txt` attached.
-5. Read the draft, then publish it.
+4. CI builds the Windows installer + portable ZIP, self-contained Linux
+   archive, macOS app, browser ZIP and Android debug APK, deploys the Pages
+   site and opens a **draft** release with the changelog section and
+   `SHA256SUMS.txt`. A signed Android release APK is added only if protected
+   keystore secrets are configured.
+5. Install/smoke-check the desktop artifacts and APK, read the draft, then
+   publish it.
 
 The service worker's cache name (`const VERSION` in `web/sw.js`) should be
 bumped with the release, so returning visitors pick up the new build instead

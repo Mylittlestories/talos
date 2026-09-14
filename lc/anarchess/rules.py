@@ -235,6 +235,11 @@ class AnarchessGame:
         self.turn_number = 1
         self.placed_tile = False                   # action A done this turn?
         self.used_pawn_action = False
+        # Anarcheckers captures may continue within a single turn.  This is
+        # the landing cell of that *same* piece; it is deliberately part of
+        # the model, not a UI-only highlight, so another piece cannot steal a
+        # compulsory jump from the chain.
+        self.chain_source: Optional[Cell] = None
         self.finished = False
         self.drawn: Optional[bool] = None          # this turn's tile colour
         self.last_tile: Optional[Cell] = None      # the tile laid this turn
@@ -256,7 +261,15 @@ class AnarchessGame:
             self.supply[colour] -= 1
 
     def clone(self) -> "AnarchessGame":
-        g = AnarchessGame(self.players, self.rules, seed=self.rng.random())
+        """Make an exact simulation copy without touching the live die.
+
+        Bots clone a position many times while considering a turn.  Advancing
+        the live RNG during those speculative copies made the next real die
+        roll depend on how long the computer happened to think.  Preserve its
+        state instead, so analysis is deterministic and side-effect free.
+        """
+        g = AnarchessGame(self.players, self.rules, seed=0)
+        g.rng.setstate(self.rng.getstate())
         g.tiles = dict(self.tiles)
         g.pawns = dict(self.pawns)
         g.supply = dict(self.supply)
@@ -265,9 +278,13 @@ class AnarchessGame:
         g.turn_number = self.turn_number
         g.placed_tile = self.placed_tile
         g.used_pawn_action = self.used_pawn_action
+        g.chain_source = self.chain_source
         g.finished = self.finished
         g.drawn = self.drawn
         g.last_tile = self.last_tile
+        g.history = list(self.history)
+        g.scores = list(self.scores)
+        g.last_action = self.last_action
         g.names = list(self.names)
         return g
 
@@ -427,9 +444,26 @@ class AnarchessGame:
         return {"settle": settle, "move": moves, "attack": attacks}
 
     def legal_pawn_actions(self) -> List[AnarchessAction]:
+        """The pawn actions legal at this exact point in the turn.
+
+        This is intentionally stricter than a collection of pseudo-legal
+        moves.  SOLO's published priority and Anarcheckers' compulsory
+        capture chain are rules of the game, so callers can safely use this
+        method to validate a move even when there is no graphical client.
+        """
         if self.finished or not self.placed_tile or self.used_pawn_action:
             return []
         me = self.acting_pawn_player()
+
+        if self.rules.checkers and self.chain_source is not None:
+            # A checkers jump that opened another jump does not give the
+            # player a fresh choice of pawn. The piece that just landed must
+            # continue until it has no capture left.
+            if self.pawns.get(self.chain_source) != me:
+                return []
+            return [AnarchessAction("attack", source=self.chain_source, cell=landing)
+                    for landing, _victim in self._attacks_from(self.chain_source, me)]
+
         options = self._pawn_options(me)
 
         if self.rules.solo:
@@ -479,6 +513,7 @@ class AnarchessGame:
             self.tiles[action.cell] = colour
             self.supply[colour] -= 1
             self.placed_tile = True
+            self.chain_source = None
             self.last_tile = action.cell
             self.last_action = action
             # The last tile no longer ends the game on the spot: the player
@@ -501,6 +536,15 @@ class AnarchessGame:
             self._end_turn()
             return True
 
+        # Validate the *published* legal action list before mutating anything.
+        # Checking only geometry here used to allow a client to bypass SOLO's
+        # settle/attack/move priority, or an Anarcheckers compulsory capture,
+        # by submitting a superficially valid move or settle request.
+        allowed = self.legal_pawn_actions()
+        if not any(a.kind == action.kind and a.cell == action.cell
+                   and a.source == action.source for a in allowed):
+            return False
+
         if action.kind == "settle":
             if (self.reserve[acting] <= 0 or action.cell is None
                     or not self._can_settle(action.cell, acting)):
@@ -514,11 +558,12 @@ class AnarchessGame:
 
         if action.kind in ("move", "attack"):
             src, dst = action.source, action.cell
-            if src is None or dst is None:
-                return False
-            if self.pawns.get(src) != acting:
+            if src is None or dst is None or self.pawns.get(src) != acting:
                 return False
             if action.kind == "move":
+                # Geometry is redundant with ``allowed`` above, but makes the
+                # mutation branch safe and self-documenting if the legal-list
+                # implementation evolves.
                 if dst not in self._moves_from(src):
                     return False
                 del self.pawns[src]
@@ -536,11 +581,15 @@ class AnarchessGame:
                 del self.pawns[src]
                 self.pawns[dst] = acting
             self.last_action = action
-            if self.rules.checkers and self._attacks_from(dst, acting):
-                # "the attacking piece must continue until there are no more
-                #  jumps" - the same pawn keeps going this turn
+            if action.kind == "attack" and self.rules.checkers and \
+                    self._attacks_from(dst, acting):
+                # "The attacking piece must continue until there are no more
+                # jumps." Remember its landing cell, so a different piece
+                # cannot take the next jump.
+                self.chain_source = dst
                 self.used_pawn_action = False
                 return True
+            self.chain_source = None
             self.used_pawn_action = True
             self._end_turn()
             return True
@@ -554,6 +603,7 @@ class AnarchessGame:
             self.turn_number += 1
         self.placed_tile = False
         self.used_pawn_action = False
+        self.chain_source = None
         self.last_tile = None
         self._roll()
         if not self.tile_cells() or self.tiles_left() == 0:
@@ -717,13 +767,34 @@ class AnarchessGame:
         return f"{who} may use one pawn action"
 
     def rules_text(self) -> str:
-        return (
-            "<h3>A turn</h3><ol>"
+        """Concise rules for the dedicated game currently on screen."""
+        land = (
             "<li><b>Roll the die</b> and take a tile of that colour.</li>"
             "<li><b>Lay the tile</b> touching at least one side of the land. "
             "If it touches exactly one tile, that tile must be the opposite "
             "colour; touching two or more, any colour goes. When nothing "
-            "fits, that restriction is ignored.</li>"
+            "fits, that restriction is ignored.</li>")
+        if self.rules.solo:
+            return (
+                "<h3>Anarchess SOLO</h3><ol>" + land +
+                "<li><b>Play the opposite-colour pawn</b> with the published "
+                "priority: settle on the new tile, else attack, else move. "
+                "Only when none is possible may the turn end.</li></ol>"
+                "<h3>Score challenge</h3><p>Areas tied between Light and Dark "
+                "score four points a tile. Aim for <b>192 points</b>; each pawn "
+                "still in reserve costs <b>-6</b>.</p>")
+        if self.rules.checkers:
+            return (
+                "<h3>Anarcheckers</h3><ol>" + land +
+                "<li><b>Optionally use one piece</b>: settle on the new tile, "
+                "or move diagonally to an empty tile. A diagonal enemy may be "
+                "jumped only when the tile beyond it is empty.</li>"
+                "<li><b>Captures are compulsory.</b> If a jump opens another "
+                "jump, the same piece must keep jumping until none remains.</li></ol>"
+                "<h3>Scoring</h3><p>Area ownership and reserve penalties follow "
+                "Anarchess.</p>")
+        return (
+            "<h3>Anarchess</h3><ol>" + land +
             "<li><b>Optionally use one pawn</b>: settle a pawn from your "
             "reserve on the tile you just laid, but only if its whole area "
             "is empty; move a pawn to an orthogonally adjacent empty tile; "

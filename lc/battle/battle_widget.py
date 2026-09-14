@@ -14,15 +14,15 @@ from __future__ import annotations
 
 import math
 import random
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Sequence, Tuple
+from dataclasses import dataclass
+from typing import Dict, List, Optional, Tuple
 
 import chess
 
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QCursor, QFont, QPainter, QColor
+from PyQt6.QtGui import QFont, QPainter, QColor
 from PyQt6.QtOpenGLWidgets import QOpenGLWidget
-from PyQt6.QtWidgets import QWidget
+from PyQt6.QtWidgets import QLabel, QWidget
 
 from . import duels as dueltable
 from . import gaits as gaittable
@@ -177,6 +177,17 @@ class BattleBoardWidget(QOpenGLWidget):
     moveRequested = pyqtSignal(object)
     #: Emitted once, the first time drawing fails, with the reason.
     glFailed = pyqtSignal(str)
+    #: The surrounding game waits for a cinematic move before asking an engine
+    #: to answer. This prevents two turns from overlapping on the stage.
+    animationStarted = pyqtSignal(str)
+    animationFinished = pyqtSignal()
+    #: A short, player-facing caption for the currently staged duel.
+    duelAnnounced = pyqtSignal(str)
+
+    # These are original TALOS presentation modes. They map to the useful
+    # high-level choices of a living chessboard without using another game's
+    # artwork, audio, or animation data.
+    ANIMATION_MODES = ("Full stage", "Combat only", "Walks only", "Still board")
 
     # distances are tuned for a 42 degree vertical field of view: the whole
     # board (9.1 units including the frame) has to fit with a small margin
@@ -202,6 +213,7 @@ class BattleBoardWidget(QOpenGLWidget):
         self.hover: Optional[chess.Square] = None
         self.fights: List[Fight] = []
         self.walks: List[Walk] = []
+        self.move_queue: List[object] = []
         self.physics = PhysicsWorld(self.rng)
         self.quality = self.settings.get("battle_quality", "High")
         gore = self.settings.get("battle_gore", "Classic")
@@ -210,6 +222,7 @@ class BattleBoardWidget(QOpenGLWidget):
         elif gore is False:
             gore = "Arcade"
         self.gore = gore if gore in ("Classic", "Arcade") else "Classic"
+        self.animation_mode = self._animation_mode_from(self.settings)
         self.camera_mode = self.settings.get("battle_camera", "Cinematic")
         cam = self.CAMERAS.get(self.camera_mode, self.CAMERAS["Cinematic"])
         self.yaw = cam["yaw"]
@@ -218,7 +231,9 @@ class BattleBoardWidget(QOpenGLWidget):
         self.target_yaw = self.yaw
         self.target_pitch = self.pitch
         self.shake = 0.0
-        self.target = (0.0, -0.75, 0.0)     # camera look-at point (centres the board)
+        self._camera_home = (0.0, -0.75, 0.0)
+        self._camera_focus = self._camera_home
+        self.target = self._camera_home       # camera look-at point
         self.time = 0.0
         self._lists: Dict[str, int] = {}
         self._ready = False
@@ -228,6 +243,14 @@ class BattleBoardWidget(QOpenGLWidget):
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setMouseTracking(True)
         self.setMinimumSize(360, 360)
+        self.stage_caption = QLabel(self)
+        self.stage_caption.setWordWrap(True)
+        self.stage_caption.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self.stage_caption.setStyleSheet(
+            "QLabel { background: rgba(8, 11, 19, 212); color: #f7d77a; "
+            "border: 1px solid rgba(240, 180, 41, 170); border-radius: 7px; "
+            "padding: 6px 10px; font-weight: 600; }")
+        self.stage_caption.hide()
         self.timer = QTimer(self)
         self.timer.setInterval(16)
         self.timer.timeout.connect(self._tick)
@@ -235,6 +258,22 @@ class BattleBoardWidget(QOpenGLWidget):
         self.setAutoFillBackground(False)
 
     # -- settings ---------------------------------------------------------
+    @classmethod
+    def _animation_mode_from(cls, settings: Dict) -> str:
+        """Normalise the new stage selector and the old capture toggle."""
+        mode = settings.get("battle_animation")
+        if mode in cls.ANIMATION_MODES:
+            return mode
+        # Builds before 2.3 only had a capture checkbox. Preserve its useful
+        # intent: true was the full living board; false left quiet walks on.
+        return "Full stage" if settings.get("battle_captures", True) else "Walks only"
+
+    def captures_animated(self) -> bool:
+        return self.animation_mode in ("Full stage", "Combat only")
+
+    def walks_animated(self) -> bool:
+        return self.animation_mode in ("Full stage", "Walks only")
+
     def apply_settings(self, settings: Dict) -> None:
         self.settings = dict(settings)
         quality = self.settings.get("battle_quality", "High")
@@ -242,7 +281,9 @@ class BattleBoardWidget(QOpenGLWidget):
             self.quality = quality
             if self._ready:
                 self._build_lists()
-        self.gore = self.settings.get("battle_gore", self.gore)
+        gore = self.settings.get("battle_gore", self.gore)
+        self.gore = gore if gore in ("Classic", "Arcade") else self.gore
+        self.animation_mode = self._animation_mode_from(self.settings)
         self.set_camera_mode(self.settings.get("battle_camera", "Cinematic"))
 
     def set_camera_mode(self, mode: str) -> None:
@@ -252,6 +293,18 @@ class BattleBoardWidget(QOpenGLWidget):
             self.target_yaw = cam["yaw"]
             self.target_pitch = cam["pitch"]
             self.distance = cam["dist"]
+
+    def _set_stage_caption(self, text: str) -> None:
+        self.stage_caption.setText(text)
+        self.stage_caption.setVisible(bool(text))
+        if text:
+            self.stage_caption.setGeometry(14, 14, max(170, self.width() - 28), 48)
+            self.stage_caption.raise_()
+
+    def resizeEvent(self, event) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        if self.stage_caption.isVisible():
+            self.stage_caption.setGeometry(14, 14, max(170, self.width() - 28), 48)
 
     # -- position sync -----------------------------------------------------
     def sync_position(self, board: chess.Board, animate: bool = False,
@@ -267,17 +320,33 @@ class BattleBoardWidget(QOpenGLWidget):
         if clear_effects:
             self.fights.clear()
             self.walks.clear()
+            self.move_queue.clear()
             self.physics.clear()
+            self._camera_focus = self._camera_home
+            self._set_stage_caption("")
         self.update()
 
     def play_move(self, record) -> None:
-        """Animate a move that already happened in the game model."""
+        """Stage a move that already happened in the chess model.
+
+        The model advances immediately so clocks, notation, and analysis stay
+        authoritative.  The stage keeps a small FIFO, however, so a human or
+        engine cannot visually overwrite a living move with the next one.
+        """
+        if self.is_animating():
+            self.move_queue.append(record)
+            return
+        self._start_move(record)
+
+    def _start_move(self, record) -> bool:
+        """Start one staged move; return whether it has an active animation."""
         move = record.move
         board_before = board_from_fen(record.fen_before)
+        board_after = board_from_fen(record.fen_after)
         piece = board_before.piece_at(move.from_square)
         if piece is None:
-            self.sync_position(chess.Board(record.fen_after))
-            return
+            self.sync_position(board_after, clear_effects=False)
+            return False
         attacker = self.pieces.pop(move.from_square, None)
         if attacker is None:
             x, z = square_to_xz(move.from_square, self.flipped)
@@ -285,18 +354,17 @@ class BattleBoardWidget(QOpenGLWidget):
         self.selected = None
         self.last_move = move
 
-        captured: Optional[chess.Piece] = None
-        captured_square: Optional[chess.Square] = None
-        if record.capture is not None:
-            captured = record.capture
-            captured_square = record.captured_square or move.to_square
-
-        if captured is not None and self.settings.get("battle_captures", True):
+        captured = record.capture
+        captured_square = record.captured_square or move.to_square if captured is not None else None
+        staged = False
+        if captured is not None and captured_square is not None and self.captures_animated():
             victim = self.pieces.pop(captured_square, None)
             vx, vz = square_to_xz(captured_square, self.flipped)
             if victim is None:
                 victim = Piece3D(piece=captured, square=captured_square, x=vx, z=vz)
-            # Every permutation of attacker and victim has its own animation.
+            # Every attacker/victim pair owns an original choreography.  The
+            # caption makes the encounter readable instead of looking like a
+            # generic capture effect.
             duel = dueltable.duel_for(piece, captured)
             fight = Fight(attacker=attacker, victim=captured, victim_square=captured_square,
                           victim_x=vx, victim_z=vz, to_square=move.to_square, move=move,
@@ -313,37 +381,50 @@ class BattleBoardWidget(QOpenGLWidget):
             length = math.hypot(dx, dz) or 1.0
             fight.dir_x, fight.dir_z = dx / length, dz / length
             self.fights.append(fight)
-        else:
-            tx, tz = square_to_xz(move.to_square, self.flipped)
-            gait = gaittable.gait_for(piece)
-            walk = Walk(piece_ref=attacker, from_x=attacker.x, from_z=attacker.z,
-                        to_x=tx, to_z=tz,
-                        to_square=move.to_square, move=move,
-                        promotion=move.promotion,
-                        hop=gait.hop,
-                        duration=gaittable.move_duration(
-                            gait, move.from_square, move.to_square),
-                        gait=gait)
-            self.walks.append(walk)
-        self.board = board_from_fen(record.fen_after)
-        # castling also moves the rook
-        if record.is_castle:
+            # A gentle focus pull makes the duel read as an encounter while
+            # retaining enough of the board to plan the next move.
+            self._camera_focus = ((attacker.x + vx) / 2, -0.18,
+                                  (attacker.z + vz) / 2)
+            caption = f"{duel.key} · {duel.name} — {duel.line}"
+            self._set_stage_caption(caption)
+            self.duelAnnounced.emit(caption)
+            self.animationStarted.emit(caption)
+            staged = True
+        elif self.walks_animated():
+            self._stage_walk(attacker, piece, move)
+            self.animationStarted.emit(f"{chess.piece_name(piece.piece_type).title()} advances")
+            staged = True
+
+        self.board = board_after
+        # Castling moves the rook on the same cinematic beat as the king.
+        if record.is_castle and self.walks_animated():
             if move.to_square > move.from_square:
                 rook_from, rook_to = move.to_square + 1, move.to_square - 1
             else:
                 rook_from, rook_to = move.to_square - 2, move.to_square + 1
             rook = self.pieces.pop(rook_from, None)
             if rook is not None and rook_from in chess.SQUARES:
-                rx, rz = square_to_xz(rook_to, self.flipped)
-                gait = gaittable.gait_for(chess.Piece(chess.ROOK, not self.flipped))
-                walk = Walk(piece_ref=rook, from_x=rook.x, from_z=rook.z,
-                            to_x=rx, to_z=rz,
-                            to_square=rook_to, move=chess.Move(rook_from, rook_to),
-                            hop=gait.hop,
-                            duration=gaittable.move_duration(gait, rook_from, rook_to),
-                            gait=gait)
-                self.walks.append(walk)
+                self._stage_walk(rook, rook.piece, chess.Move(rook_from, rook_to))
+                staged = True
+
+        if not staged:
+            # In still-board mode (or a deliberately disabled kind of
+            # animation), immediately put the authoritative board on stage.
+            self.sync_position(board_after, clear_effects=False)
         self.update()
+        return staged
+
+    def _stage_walk(self, piece_ref: Piece3D, piece: chess.Piece,
+                    move: chess.Move) -> None:
+        """Add one quiet walk using the rank's own gait."""
+        tx, tz = square_to_xz(move.to_square, self.flipped)
+        gait = gaittable.gait_for(piece)
+        self.walks.append(Walk(
+            piece_ref=piece_ref, from_x=piece_ref.x, from_z=piece_ref.z,
+            to_x=tx, to_z=tz, to_square=move.to_square, move=move,
+            promotion=move.promotion, hop=gait.hop,
+            duration=gaittable.move_duration(gait, move.from_square, move.to_square),
+            gait=gait))
 
     @staticmethod
     def _style_for(attacker: chess.Piece, victim: chess.Piece) -> str:
@@ -371,6 +452,9 @@ class BattleBoardWidget(QOpenGLWidget):
         self.time += dt
         self.yaw += (self.target_yaw - self.yaw) * 0.08
         self.pitch += (self.target_pitch - self.pitch) * 0.08
+        focus_blend = 1.0 - math.exp(-dt * 7.0)
+        self.target = tuple(current + (goal - current) * focus_blend
+                            for current, goal in zip(self.target, self._camera_focus))
         if self.shake > 0:
             self.shake = max(0.0, self.shake - dt * 2.4)
         self.physics.step(dt)
@@ -436,17 +520,29 @@ class BattleBoardWidget(QOpenGLWidget):
                 self.fights.remove(fight)
                 self._after_animation()
 
-        if busy or self.physics.shards or self.physics.sparks or self.shake > 0:
+        focus_moving = any(abs(current - goal) > 0.002
+                           for current, goal in zip(self.target, self._camera_focus))
+        if busy or self.physics.shards or self.physics.sparks or self.shake > 0 or focus_moving:
             self.update()
 
     def _after_animation(self) -> None:
-        """Re-sync once all animations are done so the scene matches the model."""
+        """Advance a queued stage, or re-sync once the scene is quiet."""
         if self.walks or self.fights:
             return
+        # A queued record only appears when a caller advances the chess model
+        # faster than the stage. Continue it before declaring the board ready.
+        while self.move_queue and not self.is_animating():
+            queued = self.move_queue.pop(0)
+            if self._start_move(queued):
+                return
+        self._camera_focus = self._camera_home
         try:
             self.sync_position(self.board, clear_effects=False)
         except Exception:
             pass
+        self._set_stage_caption("")
+        self.duelAnnounced.emit("")
+        self.animationFinished.emit()
 
     def _step_fight(self, fight: Fight, dt: float) -> None:
         fight.t += dt
@@ -845,11 +941,14 @@ class BattleBoardWidget(QOpenGLWidget):
     # -- OpenGL ------------------------------------------------------------
     def initializeGL(self) -> None:  # noqa: N802
         try:
-            GL.glClearColor(0.07, 0.08, 0.11, 1.0)
+            # A cool, deep backdrop and warm key light make the hand-built
+            # silhouettes readable without relying on texture files.
+            GL.glClearColor(0.025, 0.035, 0.065, 1.0)
             GL.glEnable(GL.GL_DEPTH_TEST)
             GL.glEnable(GL.GL_LIGHTING)
             GL.glEnable(GL.GL_LIGHT0)
             GL.glEnable(GL.GL_LIGHT1)
+            GL.glEnable(GL.GL_LIGHT2)
             GL.glEnable(GL.GL_NORMALIZE)
             # no face culling: the generated meshes are not guaranteed to have
             # a consistent winding order and every piece is closed anyway
@@ -859,8 +958,13 @@ class BattleBoardWidget(QOpenGLWidget):
             GL.glLightfv(GL.GL_LIGHT0, GL.GL_DIFFUSE, (1.0, 0.97, 0.90, 1.0))
             GL.glLightfv(GL.GL_LIGHT0, GL.GL_SPECULAR, (0.9, 0.9, 0.85, 1.0))
             GL.glLightfv(GL.GL_LIGHT1, GL.GL_POSITION, (-7.0, 5.0, -6.0, 1.0))
-            GL.glLightfv(GL.GL_LIGHT1, GL.GL_DIFFUSE, (0.35, 0.38, 0.48, 1.0))
-            GL.glLightfv(GL.GL_LIGHT1, GL.GL_SPECULAR, (0.1, 0.1, 0.15, 1.0))
+            GL.glLightfv(GL.GL_LIGHT1, GL.GL_DIFFUSE, (0.28, 0.34, 0.52, 1.0))
+            GL.glLightfv(GL.GL_LIGHT1, GL.GL_SPECULAR, (0.10, 0.14, 0.24, 1.0))
+            # A restrained amber rim separates the dark army from a dark
+            # arena, especially when the camera is orbiting at a low angle.
+            GL.glLightfv(GL.GL_LIGHT2, GL.GL_POSITION, (0.0, 3.0, -10.0, 1.0))
+            GL.glLightfv(GL.GL_LIGHT2, GL.GL_DIFFUSE, (0.34, 0.20, 0.08, 1.0))
+            GL.glLightfv(GL.GL_LIGHT2, GL.GL_SPECULAR, (0.42, 0.24, 0.10, 1.0))
             GL.glMaterialfv(GL.GL_FRONT, GL.GL_SPECULAR, (0.7, 0.7, 0.7, 1.0))
             self._build_lists()
             self._ready = True
@@ -879,6 +983,7 @@ class BattleBoardWidget(QOpenGLWidget):
         for piece_type, name in PIECE_NAMES.items():
             mesh = meshes.piece_mesh(piece_type, self.quality)
             self._lists[f"piece_{name}"] = self._compile(mesh)
+        self._lists["arena"] = self._compile(meshes.arena_mesh())
         self._lists["board"] = self._compile(meshes.board_mesh())
         self._lists["square"] = self._compile(meshes.square_overlay_mesh())
         self._lists["shard"] = self._compile(meshes.shard_mesh(self.rng, 10, 0.2))
@@ -980,10 +1085,17 @@ class BattleBoardWidget(QOpenGLWidget):
 
     def _draw_board(self) -> None:
         GL.glEnable(GL.GL_LIGHTING)
+        # A stepped plinth gives the board a proper stage instead of letting
+        # it float in a black void. It is procedural geometry like the pieces.
+        self._material((0.11, 0.13, 0.20), (0.38, 0.24, 0.10))
+        GL.glPushMatrix()
+        glCallList(self._lists["arena"])
+        GL.glPopMatrix()
         self._material((0.46, 0.33, 0.21), (0.25, 0.25, 0.25))
         GL.glPushMatrix()
         glCallList(self._lists["board"])
         GL.glPopMatrix()
+        self._draw_stage_lights()
         # squares
         GL.glDisable(GL.GL_LIGHTING)
         for square in chess.SQUARES:
@@ -999,6 +1111,22 @@ class BattleBoardWidget(QOpenGLWidget):
             GL.glTranslatef(x, 0.0, z)
             glCallList(self._lists["square"])
             GL.glPopMatrix()
+        GL.glEnable(GL.GL_LIGHTING)
+
+    def _draw_stage_lights(self) -> None:
+        """Four small procedural braziers around the board's plinth."""
+        GL.glDisable(GL.GL_LIGHTING)
+        GL.glEnable(GL.GL_BLEND)
+        GL.glBlendFunc(GL.GL_SRC_ALPHA, GL.GL_ONE)
+        GL.glPointSize(11.0)
+        GL.glBegin(GL.GL_POINTS)
+        for x, z in ((-6.7, -6.7), (-6.7, 6.7), (6.7, -6.7), (6.7, 6.7)):
+            flicker = 0.78 + 0.22 * math.sin(self.time * 7.0 + x * 1.7 + z)
+            GL.glColor4f(1.0, 0.40 + 0.28 * flicker, 0.08, 0.72)
+            GL.glVertex3f(x, 0.14 + flicker * 0.04, z)
+        GL.glEnd()
+        GL.glBlendFunc(GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA)
+        GL.glDisable(GL.GL_BLEND)
         GL.glEnable(GL.GL_LIGHTING)
 
     def _draw_highlights(self) -> None:
@@ -1161,6 +1289,11 @@ class BattleBoardWidget(QOpenGLWidget):
         return xz_to_square(ox + dx * t, oz + dz * t, self.flipped)
 
     def mousePressEvent(self, event) -> None:  # noqa: N802
+        # The chess model is intentionally paused by MainWindow while a staged
+        # turn is alive. Ignore clicks here too, so an impatient double-click
+        # cannot target a square that only exists after the duel finishes.
+        if self.is_animating() and event.button() != Qt.MouseButton.RightButton:
+            return
         pos = event.position().toPoint() if hasattr(event, "position") else event.pos()
         if event.button() == Qt.MouseButton.RightButton:
             self._orbiting = True

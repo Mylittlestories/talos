@@ -16,6 +16,79 @@ Nothing yet.
 
 ---
 
+## [2.2.0] — Three lands, sharper play
+
+### Added
+
+- **Release-grade native delivery.** A tracked Capacitor/Gradle Android shell
+  now builds an installable API-23+ debug APK on every release tag. A protected
+  keystore path produces a signed release APK when the release owner configures
+  the four signing secrets; no private key is stored in the repository.
+- **Real desktop distribution paths.** Windows tag builds now create both the
+  portable ZIP and a versioned Inno Setup EXE. Linux tag builds create a
+  self-contained archive with an `install.sh`, desktop entry, icon and AppStream
+  metadata; installation and removal are available without source-tree paths.
+- **A composed Battle stage.** The original procedural board now sits on a
+  stepped arena with warm marker lights, an encounter caption and a gentle
+  cinematic capture focus. New synthesised gallop, thud and magic foley round
+  out the existing offline sound bank.
+- **Three persistent land-game entries.** Anarchess, Anarchess SOLO and
+  Anarcheckers now open as independent desktop entries and browser pages.
+  Each has its own title, rules panel and live board, so opening SOLO or
+  Anarcheckers no longer turns an existing Anarchess game into a different
+  mode.
+- **A fuller chess ladder.** Master++, Grandmaster and Grandmaster+ extend the
+  built-in profiles to fifteen tiers, with depth caps through 14 and deliberate
+  thinking budgets through fifteen seconds. The browser shows profile depth
+  and makes Quick, Balanced and Deep search time an explicit choice.
+- **A stronger territory opponent ladder.** Settler, Tribe, Strategist and
+  Warlord plan complete legal turns rather than selecting a tile and pawn
+  action independently. The upper tiers examine an opposing reply; Warlord
+  also examines a counter-turn in a two-tribe game.
+
+### Changed
+
+- **Battle Chess has a player-controlled pace.** Full stage, Combat only,
+  Walks only and Still board replace the one capture toggle while retaining
+  backward-compatible settings. The chess model now waits to continue engine,
+  analysis and final-result work until an active staged move completes.
+- **Packaged data is writable in the right place.** Frozen builds seed a
+  per-user database and settings directory instead of attempting SQLite writes
+  inside Program Files, an app bundle or the PyInstaller resource tree.
+- **Browser graphics now scale from their own geometry.** Chess pieces are
+  inline SVG rather than font glyphs; board coordinates and capture markers
+  measure their actual squares. Land maps use CSS-sized, device-pixel-ratio
+  canvas backing stores with a stable camera, pan, zoom and centre controls,
+  so a growing land no longer shrinks the artwork.
+- **The browser UI follows the individual published games.** SOLO shows its
+  score target and forced action priority; Anarcheckers shows its compulsory
+  jump rules; Anarchess remains the original table game. A forced chain keeps
+  its original pawn selected across redraws and restored snapshots.
+
+### Fixed
+
+- **The release archives now match their documentation.** The prior Linux
+  tarball included an installer that referenced missing `packaging/` and
+  `assets/` files, while the Windows Inno Setup script was never invoked.
+  Release CI validates both paths and Android APK assembly as well.
+- **Open With now opens.** A clicked `.pgn` is imported into TALOS on Windows
+  and through the Linux launcher, rather than merely starting an empty window.
+  Interrupted engine answers carry a generation token and cannot play into a
+  newly opened game.
+- **A live Battle move is no longer erased by the synchronous model refresh.**
+  The visual transaction preserves the before-position until its walk or duel
+  starts, blocks premature board input and queues fast external callers.
+- **Rules cannot be bypassed through an API or UI edge.** SOLO's
+  settle/attack/move priority and Anarcheckers' compulsory same-piece chains
+  are validated by the model itself. Simulation clones preserve the live die
+  state, so stronger AI analysis cannot change a later real roll.
+- **Browser strength settings now take effect.** The bridge preserves every
+  selected engine profile field and its depth cap instead of searching all
+  levels to an unrestricted depth; the Warlord browser profile is no longer
+  silently limited to Strategist strength.
+
+---
+
 ## [2.1.1] — SOLO, on every board
 
 ### Fixed

@@ -1,0 +1,16 @@
+{
+  "name": "talos-mobile-build",
+  "version": "2.2.0",
+  "private": true,
+  "description": "Build tooling for the native TALOS Android shell.",
+  "scripts": {
+    "android:sync": "npx cap sync android",
+    "android:debug": "bash packaging/android/build-apk.sh debug",
+    "android:release": "bash packaging/android/build-apk.sh release"
+  },
+  "devDependencies": {
+    "@capacitor/android": "7.6.9",
+    "@capacitor/cli": "7.6.9",
+    "@capacitor/core": "7.6.9"
+  }
+}

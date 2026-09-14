@@ -1,10 +1,8 @@
 /*
- * TALOS - browser edition.
+ * TALOS — browser edition application shell.
  *
- * Everything here is wiring: the engine runs in js/worker.js, the board is
- * js/board.js, and the three games are js/play.js, js/train.js and
- * js/anarchess.js.  This file boots Pyodide, restores your settings, drives
- * the tabs and hands each view the engine.
+ * Python runs in js/worker.js. This file restores settings, owns navigation,
+ * and wires the chess, training, Anarchess, SOLO and Anarcheckers views.
  */
 
 import { Engine } from "./engine.js";
@@ -19,17 +17,22 @@ const DEFAULTS = {
   level: "Club",
   side: "w",
   variant: "standard",
+  think: "balanced",
   flip: false,
   rules: null,           // filled from the curated Anarchchess preset on boot
-  anPlayers: 2,
-  anLevel: 2,
-  anMode: "standard",
-  anTiles: "32",
+  anarchessPlayers: 2,
+  anarchessLevel: 2,
+  anarchessTiles: 32,
+  soloTiles: 32,
+  anarcheckersPlayers: 2,
+  anarcheckersLevel: 2,
+  anarcheckersTiles: 32,
 };
 
 class App {
   constructor() {
-    this.settings = Object.assign({}, DEFAULTS, loadSettings());
+    const saved = loadSettings();
+    this.settings = migrateSettings(Object.assign({}, DEFAULTS, saved), saved);
     this.engine = new Engine();
     this.views = {};
     this.active = "play";
@@ -40,8 +43,8 @@ class App {
     this.settings[key] = value;
     try {
       localStorage.setItem(SETTINGS_KEY, JSON.stringify(this.settings));
-    } catch (err) {
-      /* private mode - the app still works, it just forgets */
+    } catch (_err) {
+      /* private mode: the app still works, it just forgets */
     }
   }
 
@@ -69,21 +72,28 @@ class App {
 
     try {
       this.info = await this.engine.ready();
-    } catch (err) {
+    } catch (_err) {
       return;                                     // onerror already explained
     }
 
     this.views.play = new PlayView(this);
     this.views.train = new TrainView(this);
-    this.views.anarchess = new AnarchessView(this);
+    this.views.anarchess = new AnarchessView(this, "anarchess");
+    this.views.solo = new AnarchessView(this, "solo");
+    this.views.anarcheckers = new AnarchessView(this, "anarcheckers");
 
     await this.views.play.start();
+    await Promise.all([
+      this.views.anarchess.start(),
+      this.views.solo.start(),
+      this.views.anarcheckers.start(),
+    ]);
     await this._rules();
 
     const info = this.info;
     document.getElementById("version-line").textContent =
       "TALOS " + info.version + " · Python " + info.python + " · python-chess " +
-      info.chess + " · " + info.levels + " engine levels · " + info.rules +
+      info.chess + " · " + info.levels + " chess-engine levels · " + info.rules +
       " Anarchchess rules";
     document.getElementById("engine-state").textContent =
       "Python " + info.python + " · engine ready";
@@ -93,10 +103,10 @@ class App {
     this._install();
   }
 
-  /* ------------------------------------------------------------- chrome -- */
+  // -------------------------------------------------------------- chrome --
 
   _tabs() {
-    const tabs = Array.from(document.querySelectorAll(".tab"));
+    const tabs = Array.from(document.querySelectorAll(".tab[data-view]"));
     for (const tab of tabs) {
       tab.addEventListener("click", () => this.show(tab.dataset.view));
     }
@@ -105,17 +115,17 @@ class App {
   async show(name) {
     if (!name) return;
     this.active = name;
-    for (const tab of document.querySelectorAll(".tab")) {
-      tab.classList.toggle("active", tab.dataset.view === name);
+    for (const tab of document.querySelectorAll(".tab[data-view]")) {
+      const active = tab.dataset.view === name;
+      tab.classList.toggle("active", active);
+      tab.setAttribute("aria-selected", active ? "true" : "false");
     }
     for (const view of document.querySelectorAll(".view")) {
       view.classList.toggle("active", view.id === "view-" + name);
     }
     if (name === "train" && this.views.train) await this.views.train.activate();
-    if (name === "anarchess" && this.views.anarchess) {
-      const view = this.views.anarchess;
-      if (!view.state) await view.newGame();
-      else view.draw();
+    if (["anarchess", "solo", "anarcheckers"].includes(name) && this.views[name]) {
+      await this.views[name].activate();
     }
   }
 
@@ -151,7 +161,9 @@ class App {
     document.getElementById("preset-anarchy").addEventListener(
       "click", () => applyPreset(this.presets.anarchy));
     document.getElementById("preset-off").addEventListener("click", () => applyPreset({}));
-    document.getElementById("an-open").addEventListener("click", () => this.show("anarchess"));
+    for (const button of document.querySelectorAll("[data-open-land]")) {
+      button.addEventListener("click", () => this.show(button.dataset.openLand));
+    }
   }
 
   syncRules() {
@@ -193,7 +205,7 @@ class App {
   }
 }
 
-/* --------------------------------------------------------------- helpers -- */
+// -------------------------------------------------------------- helpers --
 
 function allOff(rules) {
   const off = {};
@@ -201,10 +213,31 @@ function allOff(rules) {
   return off;
 }
 
+function migrateSettings(settings, saved) {
+  // v2.1 stored all land modes behind one ``anMode`` selector. Preserve its
+  // useful choices while giving every dedicated game independent controls.
+  const legacy = saved || {};
+  const defaults = {
+    anarchessPlayers: legacy.anPlayers,
+    anarchessLevel: legacy.anLevel,
+    anarchessTiles: legacy.anTiles,
+    soloTiles: legacy.anTiles,
+    anarcheckersPlayers: legacy.anPlayers,
+    anarcheckersLevel: legacy.anLevel,
+    anarcheckersTiles: legacy.anTiles,
+  };
+  for (const [key, value] of Object.entries(defaults)) {
+    if (!Object.prototype.hasOwnProperty.call(legacy, key) && value !== undefined) {
+      settings[key] = value;
+    }
+  }
+  return settings;
+}
+
 function loadSettings() {
   try {
     return JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}") || {};
-  } catch (err) {
+  } catch (_err) {
     return {};
   }
 }

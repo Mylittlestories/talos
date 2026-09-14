@@ -1,5 +1,5 @@
 """
-Anarchess view - the controller that binds rules, bot, board and panel.
+Land-game view - the controller that binds each named ruleset, bot, board and panel.
 """
 
 from __future__ import annotations
@@ -20,17 +20,30 @@ from .widget import AnarchessBoard
 BOT_DELAY_MS = 260
 
 
-def default_config(players: int = 2, level: int = 2) -> Dict:
-    """A ready-to-play table: you against one computer tribe."""
+def default_config(players: int = 2, level: int = 2,
+                   variant: str = "standard") -> Dict:
+    """A ready-to-play configuration for one named land game."""
+    variant = variant if variant in ("standard", "solo", "checkers") else "standard"
+    solo = variant == "solo"
+    players = 2 if solo else max(2, min(4, players))
     return {
         "players": players,
-        "seats": ["human"] + ["bot"] * (players - 1),
+        "seats": ["human"] * players if solo else ["human"] + ["bot"] * (players - 1),
         "human": 0,
         "level": level,
         "names": PLAYER_NAMES[:players],
-        "rules": AnarchessRules(),
+        "rules": AnarchessRules(solo=solo, checkers=variant == "checkers"),
         "seed": None,
     }
+
+
+def game_variant(rules: AnarchessRules) -> str:
+    """The dedicated entry point matching a ruleset."""
+    if rules.solo:
+        return "solo"
+    if rules.checkers:
+        return "checkers"
+    return "standard"
 
 
 class _PlayerRow(QFrame):
@@ -69,7 +82,7 @@ class _PlayerRow(QFrame):
 
 
 class AnarchessView(QWidget):
-    """Playable Anarchess: board on the left, controls on the right."""
+    """A playable named land game: board on the left, controls on the right."""
 
     statusChanged = pyqtSignal(str)
 
@@ -78,6 +91,9 @@ class AnarchessView(QWidget):
         self.game = AnarchessGame(2, AnarchessRules())
         self.bots: List[Optional[AnarchessBot]] = [None, None]
         self.selected_pawn: Optional[Tuple[int, int]] = None
+        # MainWindow keeps one view for each named land game. Hidden games
+        # retain their board, but their opponent must not make moves unseen.
+        self._game_active = True
         self._bot_timer = QTimer(self)
         self._bot_timer.setInterval(BOT_DELAY_MS)
         self._bot_timer.timeout.connect(self._bot_step)
@@ -159,12 +175,27 @@ class AnarchessView(QWidget):
     # ------------------------------------------------------------------
     def new_game_requested(self) -> None:
         from .dialog import AnarchessDialog
+        # A view stays in its named game. SOLO and Anarcheckers are opened
+        # from their own desktop entries rather than being modes bolted onto
+        # an Anarchess setup dialog.
         dlg = AnarchessDialog(self, players=self.game.players,
-                              rules=self.game.rules)
+                              rules=self.game.rules,
+                              variant=game_variant(self.game.rules))
         if dlg.exec():
             self.start(dlg.config())
 
+    def set_game_active(self, active: bool) -> None:
+        """Pause a hidden dedicated game and resume its pending bot on return."""
+        self._game_active = bool(active)
+        if not self._game_active:
+            self._bot_timer.stop()
+        else:
+            self._maybe_bot()
+
     def start(self, cfg: Dict) -> None:
+        # A queued timeout from a game just replaced must never act on the new
+        # board as if it belonged to the previous variant.
+        self._bot_timer.stop()
         rules = cfg.get("rules") or AnarchessRules()
         # The model enforces this too, but normalising at the view boundary
         # keeps its seats, names and controls aligned with the two SOLO tribes.
@@ -249,6 +280,11 @@ class AnarchessView(QWidget):
                 self.selected_pawn = None
                 self._after_action()
             return
+        if game.chain_source is not None:
+            self.selected_pawn = game.chain_source
+            self._flash("Continue the compulsory jump with the marked piece.")
+            self._refresh()
+            return
         if cell in self.board.canvas.settle_cells:
             if game.apply(AnarchessAction("settle", cell=cell)):
                 self.selected_pawn = None
@@ -279,7 +315,7 @@ class AnarchessView(QWidget):
         self._maybe_bot()
 
     def _maybe_bot(self) -> None:
-        if self.game.finished:
+        if not self._game_active or self.game.finished:
             return
         bot = self.bots[self.game.current] if self.game.current < len(self.bots) else None
         if bot is not None:
@@ -328,12 +364,17 @@ class AnarchessView(QWidget):
         legal: List[Tuple[int, int]] = []
         targets: Dict[Tuple[int, int], str] = {}
         settle: List[Tuple[int, int]] = []
+        pawn_actions = game.legal_pawn_actions() if game.placed_tile else []
+        if game.chain_source is not None:
+            # Continue the marked Anarcheckers piece without requiring the
+            # player to select it again after each successful jump.
+            self.selected_pawn = game.chain_source
         if self._my_turn():
             if not game.placed_tile:
                 legal = [a.cell for a in game.legal_tile_actions()
                          if a.cell is not None]
             else:
-                actions = game.legal_pawn_actions()
+                actions = pawn_actions
                 if self.selected_pawn is not None:
                     # a pawn is picked: show only what that pawn can do
                     targets = {a.cell: a.kind for a in actions
@@ -344,7 +385,10 @@ class AnarchessView(QWidget):
         canvas.set_hints(legal, self.selected_pawn if self._my_turn() else None,
                          targets, settle if self._my_turn() else [])
 
-        self.turn_label.setText(f"Turn {game.turn_number}")
+        title = ("Anarchess SOLO" if game.rules.solo else
+                 "Anarcheckers" if game.rules.checkers else "Anarchess")
+        self.turn_label.setText(f"{title} · Turn {game.turn_number}")
+        self.players_box.setTitle("Scorecard" if game.rules.solo else "Tribes")
         if game.finished:
             if game.rules.solo:
                 self.phase_label.setText(
@@ -352,9 +396,15 @@ class AnarchessView(QWidget):
             else:
                 self.phase_label.setText("Game over")
         else:
-            phase = ("1. lay a tile" if not game.placed_tile
-                     else ("2. pawn action (required when possible)" if game.rules.solo
-                           else "2. pawn action (optional)"))
+            if not game.placed_tile:
+                phase = "1. lay a tile"
+            elif game.rules.solo:
+                phase = "2. pawn action (required when possible)"
+            elif game.rules.checkers and any(a.kind == "attack" for a in pawn_actions):
+                phase = ("2. continue the compulsory jump" if game.chain_source is not None
+                         else "2. take a compulsory jump")
+            else:
+                phase = "2. pawn action (optional)"
             drawn = ("light" if game.drawn else "dark") if game.drawn is not None else "?"
             self.phase_label.setText(
                 f"{game.names[game.current]} - {phase} - the die says "
@@ -386,17 +436,22 @@ class AnarchessView(QWidget):
 
     def _show_result(self) -> None:
         game = self.game
-        winner = game.winner()
-        scores = game.scores
-        if winner is None:
-            head = "Draw"
+        if game.rules.solo:
+            total = game.solo_score()
+            head = "SOLO complete"
+            detail = f"{total} of {SOLO_PERFECT_SCORE} points"
         else:
-            head = f"{game.names[winner]} wins"
-        detail = ", ".join(f"{game.names[i]} {scores[i]}" for i in range(game.players))
-        self.hint_label.setText(f"<b>{head}</b><br>{detail} points<br>"
+            winner = game.winner()
+            scores = game.scores
+            head = "Draw" if winner is None else f"{game.names[winner]} wins"
+            detail = ", ".join(f"{game.names[i]} {scores[i]}" for i in range(game.players))
+            detail += " points"
+        title = "Anarchess SOLO" if game.rules.solo else (
+            "Anarcheckers" if game.rules.checkers else "Anarchess")
+        self.hint_label.setText(f"<b>{head}</b><br>{detail}<br>"
                                 f"<span style='color:#98a1b5'>{len(game.areas())} areas, "
                                 f"{len(game.tiles)} tiles</span>")
-        self.statusChanged.emit(f"Anarchess - {head} ({detail})")
+        self.statusChanged.emit(f"{title} — {head} ({detail})")
 
     # ------------------------------------------------------------------
     def rulings_text(self) -> str:

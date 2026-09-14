@@ -2,9 +2,9 @@
 """Drive the running application, not its parts.
 
 The selftest covers the engines and the rules; this covers the wiring
-between them: that the window builds, that the Anarchess dialog starts a
-game in each of its three modes and that the game then plays, and that
-Battle Chess either runs or says plainly that it cannot.
+between them: that the window builds, that the three named land-game dialogs
+start their own games and that each game then plays, and that Battle Chess
+either runs or says plainly that it cannot.
 
 Run it with::
 
@@ -17,10 +17,14 @@ from __future__ import annotations
 
 import os
 import sys
+import tempfile
 import traceback
 from typing import Callable, List, Tuple
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Keep the source database pristine while running the application end to end.
+os.environ.setdefault("TALOS_DATA_DIR", os.path.join(
+    tempfile.gettempdir(), f"talos-app-smoke-{os.getpid()}"))
 
 from PyQt6.QtWidgets import QApplication          # noqa: E402
 
@@ -63,8 +67,28 @@ def main() -> int:
           window.windowTitle())
     check("the 2D board is on show", window.stack.currentWidget() is window.board)
 
+    # File associations on Windows/Linux must load the clicked PGN, rather
+    # than simply start a second empty window. Exercise the same method used
+    # by run.py before moving on to the game-mode smoke tests.
+    section("opening a PGN from the operating system")
+    from run import _startup_pgn
+    pgn_path = os.path.join(tempfile.gettempdir(), f"talos-smoke-{os.getpid()}.pgn")
+    with open(pgn_path, "w", encoding="utf-8") as fh:
+        fh.write('[Event "Association smoke"]\n\n1. e4 e5 2. Nf3 *\n')
+    try:
+        check("a PGN argument is recognised", _startup_pgn([pgn_path]) == pgn_path)
+        imported = window.open_pgn_file(pgn_path)
+        check("a clicked PGN is loaded into the game",
+              imported and len(window.game.records) == 3,
+              f"{len(window.game.records)} moves")
+    finally:
+        try:
+            os.unlink(pgn_path)
+        except FileNotFoundError:
+            pass
+
     # ------------------------------------------------------------------
-    section("anarchess, in each of its three modes")
+    section("the three independent land games")
     from lc.anarchess.rules import AnarchessRules
     from lc.anarchess.view import AnarchessView
 
@@ -109,25 +133,26 @@ def main() -> int:
         check(f"{mode}: the turn passes without a stumble", ran,
               f"{'finished' if ran else 'stuck'}")
 
-    # the dialog that starts it all, in each mode
-    section("the new game dialog")
+    # Each game has a dedicated dialog. SOLO and Anarcheckers must not be
+    # hidden as a selector inside the standard Anarchess configuration.
+    section("the dedicated land-game dialogs")
     from lc.anarchess.dialog import AnarchessDialog
 
-    def dialog_for(mode: str) -> AnarchessRules:
-        dialog = AnarchessDialog(players=2)
-        dialog.mode.setCurrentIndex(dialog.mode.findData(mode))
+    def dialog_for(mode: str) -> AnarchessDialog:
+        dialog = AnarchessDialog(players=2, variant=mode)
         app.processEvents()
-        return dialog.config()["rules"]
+        return dialog
 
     for mode, flags in (("standard", (False, False)),
                         ("solo", (True, False)),
                         ("checkers", (False, True))):
-        rules = dialog_for(mode)
-        check(f"{mode} selected in the dialog",
+        dialog = dialog_for(mode)
+        rules = dialog.config()["rules"]
+        check(f"{mode} has its own dialog rules",
               (rules.solo, rules.checkers) == flags,
               f"solo={rules.solo} checkers={rules.checkers}")
-    dialog = AnarchessDialog(players=4)
-    dialog.mode.setCurrentIndex(dialog.mode.findData("solo"))
+        check(f"{mode} dialog has no attached mode selector", not hasattr(dialog, "mode"))
+    dialog = AnarchessDialog(players=4, variant="solo")
     app.processEvents()
     solo_cfg = dialog.config()
     check("solo locks every seat to the one human",
@@ -137,13 +162,26 @@ def main() -> int:
     check("solo is always a two-tribe game",
           solo_cfg["players"] == 2 and solo_cfg["seats"] == ["human", "human"],
           f"{solo_cfg['players']} tribes")
-    dialog.mode.setCurrentIndex(dialog.mode.findData("standard"))
-    app.processEvents()
-    check("leaving solo hands a seat back to the bot",
-          dialog.players.isEnabled() and dialog.level.isEnabled()
-          and any(c.currentData() == "bot" for c in dialog.seat_combos))
     check("the reserve penalty is a dial",
           dialog.config()["rules"].reserve_penalty == 6)
+
+    # The menu entries retain distinct live boards; returning to Anarchess
+    # must not silently replace it with the SOLO or Anarcheckers configuration.
+    window.show_anarchess()
+    standard_view = window.land_views["standard"]
+    standard_game = standard_view.game
+    window.show_anarchess_solo()
+    menu_solo_view = window.land_views["solo"]
+    window.show_anarcheckers()
+    checkers_view = window.land_views["checkers"]
+    check("desktop land entries have independent persistent pages",
+          len({id(standard_view), id(menu_solo_view), id(checkers_view)}) == 3
+          and not standard_view.game.rules.solo
+          and menu_solo_view.game.rules.solo
+          and checkers_view.game.rules.checkers)
+    window.show_anarchess()
+    check("returning to Anarchess keeps its original game",
+          window.stack.currentWidget() is standard_view and standard_view.game is standard_game)
 
     # The actual canvas view must give one person the turns and the pawns of
     # both alternating tribes in SOLO; rule-only tests cannot catch this.

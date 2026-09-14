@@ -12,7 +12,7 @@ in js/engine.worker.js calls these functions and posts the result back.
     position(fen, variant, rules)                     -> what is legal now
     levels()                                          -> the strength ladder
     anarch_rules()                                    -> the Anarchchess switches
-    anarchess_new / _legal / _apply / _bot            -> the land before Chess
+    anarchess_levels / _new / _legal / _apply / _bot  -> the three land games
 """
 
 from __future__ import annotations
@@ -23,10 +23,10 @@ from typing import Any, Dict, Optional
 
 import chess
 
-from lc.anarchess.ai import AnarchessBot
+from lc.anarchess.ai import LEVELS as ANARCHESS_LEVELS, AnarchessBot
 from lc.anarchess.rules import (SOLO_PERFECT_SCORE, AnarchessAction,
                             AnarchessGame, AnarchessRules)
-from lc.core.engine import DEFAULT_LEVELS, LCEngine, Level, level_by_name
+from lc.core.engine import DEFAULT_LEVELS, LCEngine, level_by_name
 from lc.variants.anarchchess import AnarchBoard, AnarchRules, RULE_BOOK
 
 _ENGINE: Optional[LCEngine] = None
@@ -60,17 +60,18 @@ def _board(fen: str, variant: str = "standard",
 
 
 def _engine_for(level_name: str, movetime_ms: int) -> LCEngine:
+    """Reuse the browser engine while retaining the selected level profile."""
     global _ENGINE
-    level = level_by_name(level_name)
-    level = Level(level.name, level.elo, max_depth=level.max_depth,
-                  movetime_ms=movetime_ms, blunder=getattr(level, "blunder", 0.0),
-                  inaccuracy=getattr(level, "inaccuracy", 0.0),
-                  noise=getattr(level, "noise", 0),
-                  skill=getattr(level, "skill", 20))
+    base = level_by_name(level_name)
+    # ``copy`` preserves every profile field (including positional style),
+    # unlike constructing a partial Level by hand.  The browser controls the
+    # time budget, while the profile still owns its depth cap and human-error
+    # settings.
+    level = base.copy(movetime_ms=max(80, min(int(movetime_ms), 15_000)))
     if _ENGINE is None:
         _ENGINE = LCEngine(level, seed=1)
     else:
-        _ENGINE.level = level
+        _ENGINE.set_level(level)
     return _ENGINE
 
 
@@ -103,7 +104,7 @@ def about() -> str:
 
 def levels() -> str:
     return json.dumps([{"name": lv.name, "elo": lv.elo,
-                        "movetime": lv.movetime_ms}
+                        "depth": lv.max_depth, "movetime": lv.movetime_ms}
                        for lv in DEFAULT_LEVELS])
 
 
@@ -181,7 +182,10 @@ def analyse(fen: str, level: str = "Club", movetime_ms: int = 900,
                            "result": board.result()})
     engine = _engine_for(level, movetime_ms)
     try:
-        result = engine.search(board, movetime_ms=movetime_ms, max_depth=64)
+        # Do not override the selected profile's depth cap here.  The old
+        # ``max_depth=64`` made every browser level search as deeply as the
+        # clock allowed, so the visible level ladder differed mostly in noise.
+        result = engine.search(board, movetime_ms=movetime_ms)
     except Exception as exc:                      # never break the page
         return json.dumps({"error": str(exc)})
     move = result.bestmove
@@ -289,6 +293,9 @@ def _snapshot(game: AnarchessGame) -> Dict[str, Any]:
         "turn": game.turn_number,
         "placed": game.placed_tile,
         "last_tile": list(game.last_tile) if game.last_tile else None,
+        # Anarcheckers may be mid-chain. Preserve the forced piece across a
+        # browser save/restore instead of turning it into a fresh free choice.
+        "chain": list(game.chain_source) if game.chain_source else None,
         "used": game.used_pawn_action,
         "finished": game.finished,
         "drawn": game.drawn,
@@ -331,6 +338,8 @@ def _restore(state: Any) -> AnarchessGame:
     # A pawn may only be settled onto the tile that was just laid, so a
     # snapshot that forgets it comes back unable to settle at all.
     game.last_tile = (int(last[0]), int(last[1])) if last else None
+    chain = state.get("chain")
+    game.chain_source = (int(chain[0]), int(chain[1])) if chain else None
     game.used_pawn_action = bool(state.get("used", False))
     game.finished = bool(state.get("finished", False))
     if state.get("final"):
@@ -360,6 +369,12 @@ def anarchess_new(players: int = 2, rules: Any = None,
     players = 2 if parsed_rules.solo else max(2, min(4, int(players)))
     game = AnarchessGame(players, parsed_rules, seed=seed)
     return json.dumps(_snapshot(game))
+
+
+def anarchess_levels() -> str:
+    """The territory-opponent ladder, shared with the desktop dialog."""
+    return json.dumps([{"level": index, "name": name, "tip": tip}
+                       for index, (name, tip) in enumerate(ANARCHESS_LEVELS, 1)])
 
 
 def anarchess_legal(state: Any) -> str:
@@ -392,7 +407,7 @@ def anarchess_bot(state: Any, level: int = 2, seed: Optional[int] = None) -> str
     game = _restore(state)
     if game.finished:
         return json.dumps({"actions": []})
-    bot = AnarchessBot(game.current, max(1, min(3, int(level))), seed=seed)
+    bot = AnarchessBot(game.current, max(1, min(4, int(level))), seed=seed)
     actions = []
     try:
         for action in bot.choose(game):

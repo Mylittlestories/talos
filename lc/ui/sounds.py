@@ -13,7 +13,7 @@ import os
 import struct
 import tempfile
 import wave
-from typing import Dict, Optional
+from typing import Dict
 
 from PyQt6.QtCore import QUrl
 
@@ -42,6 +42,11 @@ class SoundBank:
         "clash":    dict(kind="noise", freq=180, dur=0.35, decay=6, vol=0.55),
         "shatter":  dict(kind="noise", freq=110, dur=0.70, decay=4.5, vol=0.55, sweep=0.35),
         "sword":    dict(kind="noise", freq=900, dur=0.18, decay=18, vol=0.35, sweep=0.25),
+        # Battle-stage foley: still fully synthesised, so the app carries no
+        # copyrighted sample library and works in an offline bundle.
+        "gallop":   dict(kind="click", freq=190, dur=0.12, decay=16, vol=0.32, sweep=0.68),
+        "thud":     dict(kind="noise", freq=95, dur=0.24, decay=10, vol=0.42, sweep=0.55),
+        "magic":    dict(kind="arp", freq=392, dur=0.34, decay=7, vol=0.34),
     }
 
     def __init__(self, enabled: bool = True, volume: float = 0.8):

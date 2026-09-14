@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing tag to build (e.g. v2.1.1)
+        description: Existing tag to build (e.g. v2.2.0)
         required: true
 
 permissions:
@@ -14,8 +14,10 @@ permissions:
 
 jobs:
   windows:
-    name: Windows bundle
+    name: Windows portable app and installer
     runs-on: windows-latest
+    env:
+      RELEASE_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -26,29 +28,76 @@ jobs:
           python-version: "3.12"
           cache: pip
 
-      - name: Build with PyInstaller
+      - name: Build the Windows application with PyInstaller
         shell: bash
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt pyinstaller
           pyinstaller packaging/talos.spec --noconfirm --distpath dist
+          test -f dist/talos/talos.exe
 
-      - name: Zip the bundle
-        shell: bash
-        run: 7z a -tzip talos-windows-x86_64.zip ./dist/talos/*
+      - name: Build the Inno Setup installer
+        shell: pwsh
+        run: |
+          choco install innosetup --no-progress --yes
+          $version = $env:RELEASE_VERSION -replace '^v', ''
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { throw "Inno Setup compiler was not installed: $iscc" }
+          & $iscc "/DMyAppVersion=$version" "packaging\windows-installer.iss"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $installer = "dist\installer\TALOS-Setup-$version-x64.exe"
+          if (-not (Test-Path $installer)) { throw "Expected installer not found: $installer" }
+
+      - name: Install and remove the EXE on the Windows runner
+        shell: pwsh
+        run: |
+          $version = $env:RELEASE_VERSION -replace '^v', ''
+          $installer = "dist\installer\TALOS-Setup-$version-x64.exe"
+          $install = Start-Process -FilePath $installer -ArgumentList @(
+            '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/TASKS="fileassoc"'
+          ) -Wait -PassThru
+          if ($install.ExitCode -ne 0) { throw "Installer failed: $($install.ExitCode)" }
+          $appDir = Join-Path $env:LOCALAPPDATA 'Programs\TALOS'
+          $exe = Join-Path $appDir 'talos.exe'
+          $uninstaller = Join-Path $appDir 'unins000.exe'
+          if (-not (Test-Path $exe) -or -not (Test-Path $uninstaller)) {
+            throw "Installed TALOS files were not found under $appDir"
+          }
+          if (-not (Test-Path 'HKCU:\Software\Classes\TALOS.pgn\shell\open\command')) {
+            throw 'The optional PGN Open With registration was not created'
+          }
+          $remove = Start-Process -FilePath $uninstaller -ArgumentList @(
+            '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART'
+          ) -Wait -PassThru
+          if ($remove.ExitCode -ne 0) { throw "Uninstaller failed: $($remove.ExitCode)" }
+          if (Test-Path $appDir) { throw 'TALOS installation directory survived uninstall' }
+          if (Test-Path 'HKCU:\Software\Classes\TALOS.pgn') {
+            throw 'TALOS PGN registration survived uninstall'
+          }
+
+      - name: Create the portable ZIP
+        shell: pwsh
+        run: |
+          $version = $env:RELEASE_VERSION -replace '^v', ''
+          7z a -tzip "talos-$version-windows-x86_64-portable.zip" ".\dist\talos\*"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Copy-Item "dist\installer\TALOS-Setup-$version-x64.exe" "talos-$version-windows-x86_64-setup.exe"
 
       - uses: actions/upload-artifact@v4
         with:
           name: talos-windows
-          path: talos-windows-x86_64.zip
+          path: |
+            talos-*-windows-x86_64-portable.zip
+            talos-*-windows-x86_64-setup.exe
 
   linux:
-    name: Linux bundle
+    name: Linux application archive
     runs-on: ubuntu-latest
+    env:
+      RELEASE_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v4
         with:
-          # A manual run must build the requested existing tag, not main.
           ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.tag) || github.ref }}
       - uses: actions/setup-python@v5
         with:
@@ -64,30 +113,60 @@ jobs:
             libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 libxcb-xkb1 \
             libgl1 libegl1 libglib2.0-0
 
-      - name: Build with PyInstaller
+      - name: Build the Linux application with PyInstaller
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt pyinstaller
           pyinstaller packaging/talos.spec --noconfirm --distpath dist
+          test -x dist/talos/talos
 
-      - name: Tar the bundle
+      - name: Assemble a self-contained Linux distribution
         run: |
-          cp packaging/linux-install.sh packaging/talos.desktop dist/
-          tar -czf talos-linux-x86_64.tar.gz -C dist talos talos.desktop \
-            linux-install.sh
+          version="${RELEASE_VERSION#v}"
+          root="talos-${version}-linux-x86_64"
+          rm -rf "$root"
+          mkdir -p "$root"
+          cp -a dist/talos "$root/talos"
+          install -m 0755 packaging/linux-install.sh "$root/install.sh"
+          install -m 0644 packaging/talos.desktop "$root/talos.desktop"
+          install -m 0644 packaging/talos.metainfo.xml "$root/talos.metainfo.xml"
+          install -m 0644 assets/talos-512.png "$root/talos.png"
+          install -m 0644 README.md "$root/README.md"
+          tar -czf "talos-${version}-linux-x86_64.tar.gz" "$root"
+          tar -tzf "talos-${version}-linux-x86_64.tar.gz" > archive-listing.txt
+          grep -qx "$root/install.sh" archive-listing.txt
+          grep -qx "$root/talos.desktop" archive-listing.txt
+          grep -q "^$root/talos/_internal/" archive-listing.txt
+          # Validate the archive, not merely the source tree: it must install
+          # with its own launcher, icon and AppStream metadata.
+          # Do not assume /tmp is large enough for a second extracted bundle.
+          # GitHub gives RUNNER_TEMP a durable workspace-volume location; the
+          # fallback keeps this check equally useful when run locally.
+          check_dir=$(mktemp -d "${RUNNER_TEMP:-.}/talos-linux-check.XXXXXX")
+          tar -xzf "talos-${version}-linux-x86_64.tar.gz" -C "$check_dir"
+          PREFIX="$check_dir/prefix" "$check_dir/$root/install.sh"
+          test -x "$check_dir/prefix/lib/talos/talos"
+          test -L "$check_dir/prefix/bin/talos"
+          test -f "$check_dir/prefix/share/applications/talos.desktop"
+          test -f "$check_dir/prefix/share/icons/hicolor/512x512/apps/talos.png"
+          test -f "$check_dir/prefix/share/metainfo/org.taloschess.studio.metainfo.xml"
+          PREFIX="$check_dir/prefix" "$check_dir/$root/install.sh" --uninstall
+          ! test -e "$check_dir/prefix/lib/talos"
+          rm -rf "$check_dir"
 
       - uses: actions/upload-artifact@v4
         with:
           name: talos-linux
-          path: talos-linux-x86_64.tar.gz
+          path: talos-*-linux-x86_64.tar.gz
 
   macos:
     name: macOS app
     runs-on: macos-latest
+    env:
+      RELEASE_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v4
         with:
-          # A manual run must build the requested existing tag, not main.
           ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.tag) || github.ref }}
       - uses: actions/setup-python@v5
         with:
@@ -99,22 +178,26 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt pyinstaller
           pyinstaller packaging/talos.spec --noconfirm --distpath dist
+          test -d "dist/TALOS.app"
 
       - name: Zip the app
-        run: ditto -c -k --keepParent "dist/TALOS.app" talos-macos-universal.zip
+        run: |
+          version="${RELEASE_VERSION#v}"
+          ditto -c -k --keepParent "dist/TALOS.app" "talos-${version}-macos-universal.zip"
 
       - uses: actions/upload-artifact@v4
         with:
           name: talos-macos
-          path: talos-macos-universal.zip
+          path: talos-*-macos-universal.zip
 
   web:
     name: Browser edition
     runs-on: ubuntu-latest
+    env:
+      RELEASE_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v4
         with:
-          # A manual run must build the requested existing tag, not main.
           ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.tag) || github.ref }}
       - uses: actions/setup-python@v5
         with:
@@ -126,35 +209,84 @@ jobs:
           python -m pip install chess
           python tools/build_web.py
 
-      - name: Determine release version
-        id: version
-        shell: bash
-        env:
-          INPUT_TAG: ${{ inputs.tag }}
-        run: |
-          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
-            version="${INPUT_TAG#v}"
-          else
-            version="${GITHUB_REF_NAME#v}"
-          fi
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-
       - name: Zip it for self-hosting
-        run: cd web && zip -qr "../talos-browser-${{ steps.version.outputs.version }}.zip" . && cd ..
+        run: |
+          version="${RELEASE_VERSION#v}"
+          cd web && zip -qr "../talos-browser-${version}.zip" .
 
       - uses: actions/upload-artifact@v4
         with:
           name: talos-browser
           path: talos-browser-*.zip
 
+  android:
+    name: Android APK
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+      # GitHub does not allow secrets directly in an `if:` expression. This
+      # boolean is safe to expose and lets fork/tag builds retain the debug APK.
+      ANDROID_RELEASE_SIGNING: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' && secrets.ANDROID_KEYSTORE_PASSWORD != '' && secrets.ANDROID_KEY_ALIAS != '' && secrets.ANDROID_KEY_PASSWORD != '' && 'true' || 'false' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.tag) || github.ref }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+      - uses: android-actions/setup-android@v3
+      - name: Install the Android 35 build platform
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Build the installable debug APK
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install chess
+          npm ci
+          npm run android:debug
+          (cd android && ./gradlew --no-daemon :app:testDebugUnitTest)
+          test -s release/talos-android-*-debug.apk
+          unzip -t release/talos-android-*-debug.apk >/dev/null
+
+      - name: Configure protected release signing
+        if: env.ANDROID_RELEASE_SIGNING == 'true'
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: bash packaging/android/configure-signing.sh
+
+      - name: Build the signed release APK when a signing key is available
+        if: env.ANDROID_RELEASE_SIGNING == 'true'
+        run: |
+          npm run android:release
+          test -s release/talos-android-*-release.apk
+          unzip -t release/talos-android-*-release.apk >/dev/null
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: talos-android
+          path: release/talos-android-*.apk
+
   release:
     name: Publish the release
-    needs: [windows, linux, macos, web]
+    needs: [windows, linux, macos, web, android]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          # A manual run must build the requested existing tag, not main.
           ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.tag) || github.ref }}
       - uses: actions/setup-python@v5
         with:

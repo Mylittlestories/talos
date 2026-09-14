@@ -14,7 +14,7 @@ search
     * futility / late-move / history / SEE pruning
     * check extensions, singular extensions, recapture extensions
     * killers, countermoves, butterfly + continuation history
-    * quiescence with delta pruning, SEE filtering and check evasions
+    * quiescence with delta pruning, SEE filtering, check evasions and one forcing quiet check
     * triangular PV collection (exact PVs, not TT-reconstructed guesses)
 
 evaluation
@@ -295,8 +295,11 @@ DEFAULT_LEVELS: List[Level] = [
     Level("Club+",     1650, max_depth=6, movetime_ms=1500, blunder=0.05, inaccuracy=0.15, noise=16, skill=12),
     Level("Expert",    1800, max_depth=7, movetime_ms=2000, blunder=0.03, inaccuracy=0.12, noise=10, skill=14),
     Level("Expert+",   1950, max_depth=8, movetime_ms=3000, blunder=0.015, inaccuracy=0.09, noise=6, skill=16),
-    Level("Master",    2100, max_depth=9, movetime_ms=4000, blunder=0.0, inaccuracy=0.05, noise=3,  skill=18),
-    Level("Master+",   2250, max_depth=10, movetime_ms=6000, blunder=0.0, inaccuracy=0.03, noise=0,  skill=20),
+    Level("Master",       2100, max_depth=9,  movetime_ms=4000,  blunder=0.0, inaccuracy=0.05, noise=3,  skill=18),
+    Level("Master+",      2250, max_depth=10, movetime_ms=6000,  blunder=0.0, inaccuracy=0.03, noise=0,  skill=20),
+    Level("Master++",     2350, max_depth=11, movetime_ms=8000,  blunder=0.0, inaccuracy=0.0,  noise=0,  skill=20),
+    Level("Grandmaster",  2450, max_depth=12, movetime_ms=10000, blunder=0.0, inaccuracy=0.0,  noise=0,  skill=20),
+    Level("Grandmaster+", 2550, max_depth=14, movetime_ms=15000, blunder=0.0, inaccuracy=0.0,  noise=0,  skill=20),
 ]
 
 
@@ -319,6 +322,7 @@ class LCEngine:
     RFP_MAX_DEPTH = 5
     LMP_MIN_MOVES = 3
     QS_MAX_PLY = 12
+    QS_QUIET_CHECKS = 1
 
     #: heuristic switches - mostly here so the search can be bisected and
     #: tuned, but they are also handy for "play a clean tactical search".
@@ -800,7 +804,15 @@ class LCEngine:
         return best_score
 
     def _quiescence(self, board: chess.Board, alpha: int, beta: int,
-                    ply: int) -> int:
+                    ply: int, quiet_checks_left: int = QS_QUIET_CHECKS) -> int:
+        """Stabilise a leaf with captures, promotions, and one forcing check.
+
+        Capture-only quiescence is fast but blind to the most common shallow
+        tactical motif: a quiet check that forces a concession before the
+        exchange sequence begins.  Search one such check at a time; an
+        explicit budget avoids the unbounded all-checks explosion that makes
+        simple engines slow and tactically noisy.
+        """
         self.nodes += 1
         if self._stop or self._out_of_time():
             return 0
@@ -819,26 +831,44 @@ class LCEngine:
                 alpha = stand
             if ply > 40:
                 return stand
-            moves = [m for m in board.legal_moves
-                     if board.is_capture(m) or m.promotion]
+            legal = list(board.legal_moves)
+            moves = [m for m in legal if board.is_capture(m) or m.promotion]
+            # A single quiet checking move is enough to see many forks and
+            # mating nets at the edge of the main search.  It is limited both
+            # by a per-line allowance and by the q-search ply cap.
+            if quiet_checks_left and ply < self.QS_MAX_PLY:
+                moves.extend(m for m in legal
+                             if not board.is_capture(m) and not m.promotion
+                             and board.gives_check(m))
 
-        scored = [(self._move_score(board, m, ply, None, None), m) for m in moves]
-        scored.sort(key=lambda t: -t[0])
+        scored = []
+        for move in moves:
+            quiet_check = (not in_check and not board.is_capture(move)
+                           and not move.promotion and board.gives_check(move))
+            bonus = 85_000 if quiet_check else 0
+            scored.append((self._move_score(board, move, ply, None, None) + bonus,
+                           move, quiet_check))
+        scored.sort(key=lambda item: -item[0])
 
-        for _, move in scored:
+        for _, move, quiet_check in scored:
             promotion = move.promotion
             victim = board.piece_type_at(move.to_square)
             victim_value = PIECE_VALUES[victim] if victim else 0
             if promotion:
                 victim_value += PIECE_VALUES[promotion]
-            # delta pruning
-            if not in_check and not promotion and stand + victim_value + 180 < alpha:
+            # Delta and SEE pruning only apply to volatile moves. A quiet
+            # check is deliberately retained; its value is the forcing reply,
+            # not an immediate captured piece.
+            if (not in_check and not quiet_check and not promotion
+                    and stand + victim_value + 180 < alpha):
                 continue
-            # SEE filter
-            if not in_check and promotion is None and self.see(board, move) < 0:
+            if (not in_check and not quiet_check and promotion is None
+                    and self.see(board, move) < 0):
                 continue
             board.push(move)
-            score = -self._quiescence(board, -beta, -alpha, ply + 1)
+            score = -self._quiescence(
+                board, -beta, -alpha, ply + 1,
+                quiet_checks_left - 1 if quiet_check else quiet_checks_left)
             board.pop()
             if score >= beta:
                 return score

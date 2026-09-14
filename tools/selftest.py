@@ -13,17 +13,23 @@ from __future__ import annotations
 
 import os
 import sys
+import tempfile
 import time
 import traceback
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# A real packaged app keeps its mutable database outside its read-only bundle.
+# Exercise that path too, without letting a test run alter the checked-in
+# Lucas content database.
+os.environ.setdefault("TALOS_DATA_DIR", os.path.join(
+    tempfile.gettempdir(), f"talos-selftest-{os.getpid()}"))
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault("QT_LOGGING_RULES", "qt.multimedia.*=false")
 
 import chess
 
 from PyQt6.QtCore import QEventLoop, QTimer
-from PyQt6.QtWidgets import QApplication
+from PyQt6.QtWidgets import QApplication, QWidget
 
 APP = QApplication(sys.argv[:1])
 
@@ -84,6 +90,14 @@ def test_engine() -> None:
     weak = LCEngine(DEFAULT_LEVELS[0])
     moves = {weak.search(chess.Board(), movetime_ms=60, max_depth=1).bestmove for _ in range(6)}
     check("weak level is varied", len(moves) > 1, f"{len(moves)} different moves in 6 tries")
+    names = [level.name for level in DEFAULT_LEVELS]
+    check("the engine ladder now reaches Grandmaster+",
+          len(DEFAULT_LEVELS) >= 15 and names[-1] == "Grandmaster+"
+          and DEFAULT_LEVELS[-1].max_depth > DEFAULT_LEVELS[9].max_depth,
+          f"{len(DEFAULT_LEVELS)} levels through {names[-1]}")
+    capped = LCEngine(DEFAULT_LEVELS[0], seed=3).search(chess.Board(), movetime_ms=300)
+    check("a level profile owns its default depth cap", capped.depth <= DEFAULT_LEVELS[0].max_depth,
+          f"d{capped.depth} cap d{DEFAULT_LEVELS[0].max_depth}")
     check("searches complete quickly", time.time() - started < 60)
 
 
@@ -136,6 +150,27 @@ def test_game_model() -> None:
           f"{draw_game.result} · {draw_game.reason}")
 
 
+def test_paths() -> None:
+    section("Application data")
+    from pathlib import Path
+    from lc.paths import _copy_seed, database_path, data_dir, resource_path, settings_path
+
+    target = Path(os.environ["TALOS_DATA_DIR"])
+    seed = resource_path("data", "lucas.db")
+    provisioned = database_path()
+    check("player data uses a writable per-user directory", data_dir() == target,
+          str(data_dir()))
+    check("a packaged database is seeded on first launch", provisioned.is_file()
+          and provisioned.stat().st_size == seed.stat().st_size,
+          f"{provisioned.stat().st_size // (1024 * 1024)} MB")
+    check("settings live beside the player database", settings_path().parent == target)
+    existing = target / "existing-player-progress.db"
+    existing.write_bytes(b"keep this player's database")
+    _copy_seed(seed, existing)
+    check("seeding never replaces existing player progress",
+          existing.read_bytes() == b"keep this player's database")
+
+
 def test_interface() -> None:
     section("Interface")
     from lc.ui.main_window import MainWindow
@@ -169,6 +204,43 @@ def test_interface() -> None:
           f"{len(window.eval_history)} evaluations")
     window.takeback()
     check("takeback works", len(window.game.records) <= 1)
+
+    # The real OpenGL renderer cannot draw under offscreen CI, so exercise its
+    # contract with a tiny stage double: Game.push emits refresh before the
+    # record reaches play_move(). That refresh must not wipe the new duel.
+    class StageDouble(QWidget):
+        def __init__(self):
+            super().__init__()
+            self.animating = False
+            self.synced = 0
+            self.played = 0
+
+        def sync_position(self, _board):
+            self.synced += 1
+
+        def play_move(self, _record):
+            self.played += 1
+            self.animating = True
+
+        def is_animating(self):
+            return self.animating
+
+    stage = StageDouble()
+    window.game.set_player(chess.WHITE, HumanPlayer("You"))
+    window.game.set_player(chess.BLACK, HumanPlayer("Friend"))
+    window.stack.addWidget(stage)
+    window.battle_widget = stage
+    window.stack.setCurrentWidget(stage)
+    stage.synced = 0
+    staged = window.do_move(next(iter(window.game.board.legal_moves)))
+    check("battle stage survives the model refresh transaction",
+          staged and stage.played == 1 and stage.synced == 0 and window._battle_waiting_turn)
+    stage.animating = False
+    window._on_battle_animation_finished()
+    check("battle stage releases the next turn after its animation",
+          stage.synced == 1 and not window._battle_waiting_turn)
+    window.battle_widget = None
+    window.stack.setCurrentWidget(window.board)
     return window
 
 
@@ -283,6 +355,20 @@ def test_uci() -> None:
           holder["res"].bestmove in chess.Board().legal_moves,
           str(holder.get("res").bestmove) if holder.get("res") else "no result")
     player.quit()
+
+    # A reset/PGN load can arrive while an old worker is posting back. Its
+    # generation token must discard that answer rather than move in the new
+    # position. Call the tiny signal boundary directly to avoid timing luck.
+    from lc.core.engine import SearchResult
+    from lc.core.players import HumanPlayer
+    guarded = HumanPlayer("stale-result guard")
+    received = []
+    guarded.finished.connect(lambda result: received.append(result))
+    guarded._think_token = 12
+    guarded._on_result(11, SearchResult())
+    check("stale engine results are ignored", not received)
+    guarded._on_result(12, SearchResult())
+    check("current engine result still arrives", len(received) == 1)
 
 
 def test_battle() -> None:
@@ -729,6 +815,54 @@ def test_anarchess() -> None:
           not any(a.kind == "pass" for a in checkers.legal_actions())
           and not checkers.apply(AnarchessAction("pass")))
 
+    # The published SOLO priority is enforced where state changes, not merely
+    # by hiding lower-priority buttons in a view.
+    priority_solo = AnarchessGame(2, AnarchessRules(solo=True), seed=4)
+    priority_solo.tiles = {(0, 0): LIGHT, (1, 0): DARK, (2, 0): LIGHT}
+    priority_solo.pawns = {(1, 0): 1}
+    priority_solo.reserve = [8, 7]
+    priority_solo.current = 0
+    priority_solo.placed_tile = True
+    priority_solo.last_tile = (0, 0)              # Light tile -> Dark pawn acts
+    check("SOLO cannot bypass its settle-first priority",
+          [a.kind for a in priority_solo.legal_pawn_actions()] == ["settle"]
+          and not priority_solo.apply(AnarchessAction("move", source=(1, 0),
+                                                       cell=(2, 0))))
+
+    # A chain is the *same* attacking checkers piece, and therefore cannot be
+    # hijacked by a different available capture, a move, settle, or pass.
+    chain = AnarchessGame(2, AnarchessRules(checkers=True, tiles_per_colour=16), seed=5)
+    chain.tiles = {(0, 0): LIGHT, (1, 1): DARK, (2, 2): LIGHT,
+                   (3, 3): DARK, (4, 4): LIGHT, (5, 1): LIGHT,
+                   (6, 2): DARK, (7, 3): LIGHT}
+    chain.pawns = {(0, 0): 0, (1, 1): 1, (3, 3): 1,
+                   (5, 1): 0, (6, 2): 1}
+    chain.current = 0
+    chain.placed_tile = True
+    chain.last_tile = (0, 0)
+    first_jump = chain.apply(AnarchessAction("attack", source=(0, 0), cell=(2, 2)))
+    chained = chain.legal_actions()
+    check("Anarcheckers keeps a chain with the original piece",
+          first_jump and chain.chain_source == (2, 2)
+          and [(a.source, a.cell) for a in chained] == [((2, 2), (4, 4))]
+          and not chain.apply(AnarchessAction("attack", source=(5, 1), cell=(7, 3))))
+    check("the required chain jump ends the turn only when complete",
+          chain.apply(AnarchessAction("attack", source=(2, 2), cell=(4, 4)))
+          and not chain.placed_tile and chain.chain_source is None)
+
+    # Simulation must not consume the live die. Otherwise a stronger bot could
+    # alter a later real tile colour simply by examining more candidates.
+    rng_probe = AnarchessGame(2, seed=29)
+    before_rng = rng_probe.rng.getstate()
+    _ = [rng_probe.clone() for _ in range(3)]
+    check("AI simulation leaves the live die untouched", rng_probe.rng.getstate() == before_rng)
+    advanced = AnarchessGame(2, seed=30)
+    choices = AnarchessBot(advanced.current, 4, seed=1).choose(advanced)
+    check("the Warlord returns a legal complete turn",
+          bool(choices) and all(advanced.apply(action) for action in choices)
+          and not advanced.placed_tile,
+          " · ".join(action.kind for action in choices))
+
     check("every ruling is documented", len(RULINGS) >= 8,
           f"{len(RULINGS)} rulings recorded")
 
@@ -827,6 +961,7 @@ def main() -> int:
         test_engine()
         test_variants()
         test_game_model()
+        test_paths()
         window = test_interface()
         test_training(window)
         test_database(window)

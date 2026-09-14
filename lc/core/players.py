@@ -21,7 +21,7 @@ from PyQt6.QtCore import QObject, pyqtSignal
 
 from .engine import DEFAULT_LEVELS, Level, LCEngine, SearchResult, level_by_name
 from .thinker import ThinkThread
-from .uci import Limit, UCIEngine, EngineInfo
+from .uci import UCIEngine, EngineInfo
 
 
 class Player(QObject):
@@ -36,6 +36,10 @@ class Player(QObject):
         self.name = name
         self.human = human
         self._thread: Optional[ThinkThread] = None
+        # Every asynchronous search owns a generation. A cancelled worker can
+        # still post a queued Qt signal, but it must never play into a new game.
+        self._think_token = 0
+        self._retired_threads = []
 
     # -- identification ---------------------------------------------------
     def describe(self) -> str:
@@ -47,24 +51,51 @@ class Player(QObject):
     # -- async ------------------------------------------------------------
     def think(self, board: chess.Board, limit=None, multipv: int = 1) -> None:
         self.stop()
-        self._thread = ThinkThread(self._search, board, limit, multipv)
-        self._thread.result.connect(self._on_result)
-        self._thread.progress.connect(self._on_progress)
-        self._thread.failed.connect(self.failed.emit)
-        self._thread.start()
+        token = self._think_token
+        thread = ThinkThread(self._search, board, limit, multipv)
+        self._thread = thread
+        thread.result.connect(lambda result, t=token: self._on_result(t, result))
+        thread.progress.connect(lambda result, t=token: self._on_progress(t, result))
+        thread.failed.connect(lambda message, t=token: self._on_failed(t, message))
+        thread.finished.connect(lambda th=thread: self._retire_thread(th))
+        thread.start()
 
-    def _on_result(self, res: SearchResult) -> None:
+    def _on_result(self, token: int, res: SearchResult) -> None:
+        if token != self._think_token:
+            return
         self._thread = None
         self.finished.emit(res)
 
-    def _on_progress(self, res: SearchResult) -> None:
-        self.info.emit(res)
+    def _on_progress(self, token: int, res: SearchResult) -> None:
+        if token == self._think_token:
+            self.info.emit(res)
+
+    def _on_failed(self, token: int, message: str) -> None:
+        if token == self._think_token:
+            self._thread = None
+            self.failed.emit(message)
+
+    def _retire_thread(self, thread: ThinkThread) -> None:
+        """Release an interrupted worker only after Qt confirms it stopped."""
+        try:
+            self._retired_threads.remove(thread)
+        except ValueError:
+            pass
+        # ThinkThread keeps its own finished-object registry until the next
+        # worker reaps it. Do not call deleteLater here: that would leave the
+        # registry holding an invalid PyQt wrapper.
 
     def stop(self) -> None:
-        th = self._thread
-        if th is not None:
+        self._think_token += 1
+        thread = self._thread
+        self._thread = None
+        if thread is not None:
+            # Keep a Python reference until QThread has actually stopped;
+            # otherwise replacing it for the next move can destroy a running
+            # thread. Its callbacks are already invalidated by the token.
+            self._retired_threads.append(thread)
             try:
-                th.request_stop()
+                thread.request_stop()
             except Exception:
                 pass
 

@@ -1,0 +1,32 @@
+import java.util.Properties
+
+/*
+ * Optional release signing for TALOS Android artifacts.
+ *
+ * This file is deliberately harmless in a checkout: a release build only gets
+ * a signingConfig after android/signing.properties has been generated from
+ * CI secrets or by the release owner. No private key is ever committed.
+ */
+def talosSigningFile = rootProject.file('signing.properties')
+if (talosSigningFile.exists()) {
+    def talosSigning = new Properties()
+    talosSigningFile.withInputStream { stream -> talosSigning.load(stream) }
+    if (talosSigning.storeFile && talosSigning.storePassword &&
+            talosSigning.keyAlias && talosSigning.keyPassword) {
+        android {
+            signingConfigs {
+                release {
+                    storeFile rootProject.file(talosSigning.storeFile)
+                    storePassword talosSigning.storePassword
+                    keyAlias talosSigning.keyAlias
+                    keyPassword talosSigning.keyPassword
+                }
+            }
+            buildTypes {
+                release {
+                    signingConfig signingConfigs.release
+                }
+            }
+        }
+    }
+}

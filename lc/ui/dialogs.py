@@ -12,12 +12,12 @@ import chess
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (QCheckBox, QComboBox, QDialog, QDialogButtonBox, QDoubleSpinBox,
-                             QFileDialog, QFormLayout, QGridLayout, QGroupBox, QHBoxLayout,
+                             QFileDialog, QFormLayout, QGroupBox, QHBoxLayout,
                              QLabel, QLineEdit, QListWidget, QMessageBox, QPlainTextEdit,
-                             QProgressBar, QPushButton, QSpinBox, QTabWidget, QTreeWidget,
+                             QPushButton, QSpinBox, QTabWidget, QTreeWidget,
                              QTreeWidgetItem, QVBoxLayout, QWidget)
 
-from ..core.engine import DEFAULT_LEVELS, Level
+from ..core.engine import DEFAULT_LEVELS
 from ..core.game import TimeControl, VARIANTS
 from ..core.players import BuiltInPlayer
 from ..core.uci import find_engines
@@ -331,8 +331,13 @@ class PreferencesDialog(QDialog):
         self.auto_save.setChecked(bool(s.get("auto_save", True)))
         self.show_eval = QCheckBox()
         self.show_eval.setChecked(bool(s.get("show_eval", True)))
-        self.battle_on_capture = QCheckBox("Animate captures in battle mode")
-        self.battle_on_capture.setChecked(bool(s.get("battle_captures", True)))
+        self.battle_animation = QComboBox()
+        self.battle_animation.addItems(["Full stage", "Combat only", "Walks only", "Still board"])
+        mode = s.get("battle_animation")
+        if mode not in [self.battle_animation.itemText(i)
+                        for i in range(self.battle_animation.count())]:
+            mode = "Full stage" if s.get("battle_captures", True) else "Walks only"
+        self.battle_animation.setCurrentText(mode)
         self.battle_quality = QComboBox()
         self.battle_quality.addItems(["Low", "Medium", "High", "Ultra"])
         self.battle_quality.setCurrentText(s.get("battle_quality", "High"))
@@ -354,9 +359,9 @@ class PreferencesDialog(QDialog):
             "Six ways to walk and thirty duels: a different animation for "
             "every capture, as in the 1988 original.")
         self.duels_button.clicked.connect(self._show_duels)
+        form.addRow("Battle animation", self.battle_animation)
         form.addRow("Battle quality", self.battle_quality)
         form.addRow("Battle camera", self.battle_camera)
-        form.addRow("", self.battle_on_capture)
         form.addRow("", self.duels_button)
         layout.addLayout(form)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok |
@@ -380,7 +385,10 @@ class PreferencesDialog(QDialog):
             "auto_queen": self.auto_queen.isChecked(),
             "auto_save": self.auto_save.isChecked(),
             "show_eval": self.show_eval.isChecked(),
-            "battle_captures": self.battle_on_capture.isChecked(),
+            "battle_animation": self.battle_animation.currentText(),
+            # Kept for settings files opened by an older TALOS build.
+            "battle_captures": self.battle_animation.currentText()
+            in ("Full stage", "Combat only"),
             "battle_quality": self.battle_quality.currentText(),
             "battle_camera": self.battle_camera.currentText(),
         }
@@ -574,8 +582,9 @@ def about_dialog(parent=None) -> QMessageBox:
         "<li><b>Battle Chess</b> &mdash; capture a piece and a procedurally "
         "generated 3D fight plays out. Turn it on or off at will; it is a "
         "feature, not the identity</li>"
-        "<li><b>Anarchess</b>, the land-building board game for two to four "
-        "players, and <b>Anarchchess</b>, chess with the rules you choose</li>"
+        "<li><b>Anarchess</b>, <b>Anarchess SOLO</b> and <b>Anarcheckers</b> "
+        "as separate land-game entries, plus <b>Anarchchess</b>, chess with "
+        "the rules you choose</li>"
         "<li>Analysis with an evaluation graph, MultiPV and blunder detection</li>"
         "</ul>"
         "<p style='color:#9ca3af'>Tactics and training content come from the "

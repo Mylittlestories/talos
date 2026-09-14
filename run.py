@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import os
 import sys
+from typing import Optional
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -47,9 +48,12 @@ def _app_icon():
     """
     from PyQt6.QtGui import QIcon
 
+    # ``resource_root`` is PyInstaller's _MEIPASS in a frozen bundle and the
+    # repository root while developing. It keeps the taskbar icon available on
+    # Windows, Linux and macOS without treating player data as an app resource.
+    from lc.paths import resource_root
     root = os.path.dirname(os.path.abspath(__file__))
-    # inside a one-file bundle the assets sit next to the executable
-    bases = [getattr(sys, "_MEIPASS", root), root]
+    bases = [str(resource_root()), root]
     icon = QIcon()
     for name in ("assets/talos-16.png", "assets/talos-32.png",
                  "assets/talos-48.png", "assets/talos-128.png",
@@ -65,9 +69,9 @@ def _app_icon():
 def _saved_theme() -> str:
     """The interface theme the player last picked."""
     import json
+    from lc.paths import settings_path
     from lc.ui.theme import PALETTE_NAMES
-    path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                        "data", "settings.json")
+    path = settings_path()
     try:
         with open(path) as fh:
             name = json.load(fh).get("ui_theme", "midnight")
@@ -76,10 +80,23 @@ def _saved_theme() -> str:
         return "midnight"
 
 
+def _startup_pgn(arguments: list[str]) -> Optional[str]:
+    """Return the first existing PGN passed by a file association, if any."""
+    for argument in arguments:
+        # A desktop launcher may add switches in the future. Only treat a real
+        # PGN file as a document, so an arbitrary command-line argument cannot
+        # unexpectedly become an import attempt.
+        path = os.path.abspath(os.path.expanduser(argument))
+        if path.lower().endswith(".pgn") and os.path.isfile(path):
+            return path
+    return None
+
+
 def main() -> int:
     from PyQt6.QtCore import Qt
     from PyQt6.QtWidgets import QApplication
     _install_excepthook()
+    startup_pgn = _startup_pgn(sys.argv[1:])
 
     if hasattr(Qt, "AA_EnableHighDpiScaling"):
         QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
@@ -99,6 +116,8 @@ def main() -> int:
     from lc.ui.main_window import MainWindow
 
     window = MainWindow()
+    if startup_pgn:
+        window.open_pgn_file(startup_pgn)
     window.show()
     return app.exec()
 

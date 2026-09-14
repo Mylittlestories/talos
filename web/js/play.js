@@ -22,6 +22,7 @@ export class PlayView {
       matB: document.getElementById("mat-b"),
       variant: document.getElementById("variant"),
       level: document.getElementById("level"),
+      think: document.getElementById("think-time"),
       side: document.getElementById("side"),
       list: document.getElementById("movelist"),
     };
@@ -50,6 +51,7 @@ export class PlayView {
       this.newGame();
     });
     this.el.level.addEventListener("change", () => this.app.set("level", this.el.level.value));
+    this.el.think.addEventListener("change", () => this.app.set("think", this.el.think.value));
     this.el.side.addEventListener("change", () => {
       this.app.set("side", this.el.side.value);
       this.maybeEngineMove();
@@ -66,16 +68,22 @@ export class PlayView {
   /** Called once the engine is up. */
   async start() {
     const levels = await this.app.engine.json("levels");
+    this.levels = levels;
     this.el.level.innerHTML = levels
-      .map((lv) => '<option value="' + lv.name + '">' + lv.name + " — " + lv.elo + "</option>")
+      .map((lv) => '<option value="' + escapeHtml(lv.name) + '" title="Depth ' +
+        lv.depth + ", up to " + formatSeconds(lv.movetime) + '">' +
+        escapeHtml(lv.name) + " — " + lv.elo + " · d" + lv.depth + "</option>")
       .join("");
     const settings = this.app.settings;
     this.el.variant.value = settings.variant;
     this.el.side.value = settings.side;
+    this.el.think.value = ["quick", "balanced", "deep"].includes(settings.think)
+      ? settings.think : "balanced";
     this.el.level.value = levels.some((lv) => lv.name === settings.level)
       ? settings.level
       : levels[Math.min(6, levels.length - 1)].name;
     this.app.set("level", this.el.level.value);
+    this.app.set("think", this.el.think.value);
     this.board.setFlipped(!!settings.flip);
     await this.refresh();
   }
@@ -90,6 +98,19 @@ export class PlayView {
 
   get fen() {
     return this.history[this.history.length - 1];
+  }
+
+  thinkBudget(forHint = false) {
+    const selected = (this.levels || []).find((level) => level.name === this.el.level.value);
+    const nominal = Number(selected && selected.movetime) || 900;
+    const mode = this.el.think.value;
+    let budget = nominal;
+    if (mode === "quick") budget = Math.min(nominal, 700);
+    else if (mode === "balanced") budget = Math.min(nominal, 2000);
+    // A hint should be useful at beginner levels too, while the deep option
+    // remains a deliberate opt-in for a Grandmaster search in Pyodide.
+    if (forHint) budget = Math.max(900, Math.min(mode === "deep" ? nominal : budget, 2500));
+    return Math.max(80, Math.min(15_000, Math.round(budget)));
   }
 
   async refresh(options) {
@@ -153,7 +174,8 @@ export class PlayView {
     if (this.busy) return;
     this.busy = true;
     this.board.interactive = false;
-    this.el.status.textContent = "Thinking…";
+    const budget = this.thinkBudget();
+    this.el.status.textContent = "Thinking — up to " + formatSeconds(budget) + "…";
     try {
       for (let guard = 0; guard < 200; guard += 1) {
         const current = this.board.pos;
@@ -163,7 +185,7 @@ export class PlayView {
 
         const answer = await this.app.engine.json(
           "analyse",
-          [current.fen, this.el.level.value, 900, this.variant, JSON.stringify(this.rules())]);
+          [current.fen, this.el.level.value, budget, this.variant, JSON.stringify(this.rules())]);
         if (!answer.bestmove) break;
         const next = await this.app.engine.json(
           "push", [current.fen, answer.bestmove, this.variant, JSON.stringify(this.rules())]);
@@ -185,7 +207,7 @@ export class PlayView {
     if (this.busy) return;
     this.el.status.textContent = "Looking for a good move…";
     const answer = await this.app.engine.json(
-      "analyse", [this.board.pos.fen, this.el.level.value, 1200,
+      "analyse", [this.board.pos.fen, this.el.level.value, this.thinkBudget(true),
                   this.variant, JSON.stringify(this.rules())]);
     if (!answer.bestmove) return;
     this.board.hint = answer.bestmove.slice(2, 4);
@@ -223,6 +245,12 @@ export class PlayView {
     await this.refresh();
     await this.maybeEngineMove();
   }
+}
+
+function formatSeconds(milliseconds) {
+  const seconds = Number(milliseconds) / 1000;
+  return seconds < 1 ? Math.round(Number(milliseconds)) + " ms" :
+    (seconds % 1 ? seconds.toFixed(1) : String(seconds)) + " s";
 }
 
 function describe(pos, gap) {

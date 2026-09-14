@@ -14,7 +14,7 @@ Writes:
 
     web/python/lc/...            the engine and both games, unmodified
     web/python/bridge.py         a thin JSON API over them
-    web/python/manifest.json     what the worker has to fetch
+    web/python/files.json        what the worker has to fetch
     web/data/sets.json           the training sets
     web/data/puzzles.json        the puzzles, grouped by set
 """
