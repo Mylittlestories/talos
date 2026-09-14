@@ -449,38 +449,105 @@ def test_anarchy() -> None:
 
 
 def test_anarchess() -> None:
+    """The official rules, checked against the designer's rulebook."""
     section("Anarchess (the land before Chess)")
-    from lc.anarchess import AnarchessBot, AnarchessGame, AnarchessRules
-    from lc.anarchess.rules import RULINGS
+    from lc.anarchess.ai import AnarchessBot
+    from lc.anarchess.rules import (LIGHT, DARK, RULINGS, AnarchessGame,
+                                    AnarchessRules, AnarchessAction)
 
-    game = AnarchessGame(2, AnarchessRules())
-    check("opening is a single tile", len(game.tile_cells()) == 1)
-    game.apply(game.legal_tile_actions()[0])
-    check("the first tile is placed", len(game.tiles) == 1,
-          f"{len(game.tiles)} tile(s)")
-    while not game.finished:
-        actions = game.legal_actions()
-        if not actions:
-            break
-        game.apply(actions[0])
-    check("a whole game can be played out", game.finished and len(game.tiles) == 64,
-          f"{len(game.tiles)} tiles, scores {game.scores}")
-    check("areas are scored", sum(game.scores) <= 64 and len(game.areas()) >= 1,
-          f"{len(game.areas())} areas")
+    game = AnarchessGame(2, seed=3)
+    check("the land opens with two tiles of each colour",
+          sum(game.tiles.values()) == 2 and len(game.tiles) == 4,
+          f"{len(game.tiles)} tiles")
+    check("the lights of the opening lie diagonally",
+          game.tiles[(0, 0)] is LIGHT and game.tiles[(1, 1)] is LIGHT
+          and game.tiles[(0, 1)] is DARK and game.tiles[(1, 0)] is DARK)
+    check("the player of the opposite colour plays first",
+          game.current == (1 if game.drawn == LIGHT else 0),
+          f"drew {'light' if game.drawn else 'dark'}")
 
-    # the area routine agrees with a plain flood fill
-    grid = {c: (sum(c) % 2 == 0) for c in
-            [(x, y) for x in range(6) for y in range(6)]}
-    probe = AnarchessGame(2, AnarchessRules())
-    probe.tiles = dict(grid)
-    found = probe.areas()
-    check("area detection matches a reference",
-          sorted(len(a) for a in found) == sorted(
-              len(a) for a in _reference_areas(grid)),
-          f"{len(found)} areas")
+    # R1 - a tile touching exactly one other must touch the opposite colour
+    probe = AnarchessGame(2, seed=1)
+    probe.tiles = {(0, 0): LIGHT}
+    probe.supply = {LIGHT: 4, DARK: 4}
+    probe.drawn = DARK
+    ok_dark = probe._placement_ok((0, -1), DARK)      # touches the light tile
+    probe.drawn = LIGHT
+    ok_light = probe._placement_ok((0, -1), LIGHT)
+    check("R1: one neighbour must be the opposite colour",
+          ok_dark and not ok_light, "same colour refused")
+    probe.tiles = {(0, 0): LIGHT, (2, 0): DARK}
+    check("R2: two or more neighbours may be any colour",
+          probe._placement_ok((1, 0), LIGHT))
 
+    # attacks are diagonal, and need no friendly support
+    probe = AnarchessGame(2, seed=1)
+    probe.tiles = {(0, 0): LIGHT, (1, 1): DARK}
+    probe.pawns = {(0, 0): 0, (1, 1): 1}
+    probe.current = 0
+    probe.placed_tile = True
+    probe.last_tile = (0, 0)
+    acts = probe.legal_pawn_actions()
+    check("a pawn attacks diagonally, with no support beside it",
+          any(a.kind == "attack" and a.cell == (1, 1) and a.source == (0, 0)
+              for a in acts))
+
+    # a pawn may only be settled on the tile laid that turn, in an empty area
+    probe = AnarchessGame(2, seed=1)
+    probe.tiles = {(0, 0): LIGHT, (1, 0): LIGHT, (2, 0): LIGHT}
+    probe.pawns = {(2, 0): 1}                       # an enemy in the area
+    probe.placed_tile = True
+    probe.last_tile = (0, 0)
+    probe.drawn = LIGHT
+    check("settling needs the area empty of pawns",
+          not any(a.kind == "settle" for a in probe.legal_pawn_actions()))
+    probe.pawns = {}
+    probe.last_tile = (0, 0)
+    check("a pawn settles on the tile just laid",
+          any(a.kind == "settle" and a.cell == (0, 0)
+              for a in probe.legal_pawn_actions()))
+
+    # scoring: 2 a tile, 3 for a lone holder, 1 in the taxed largest area,
+    # and -6 for every pawn left in the reserve
+    # A big unowned area soaks up the largest-area tax, so the probes below
+    # measure one rule at a time.
+    decoy = {(x, 40): DARK for x in range(6)}
+
+    probe = AnarchessGame(2, seed=1)
+    probe.tiles = dict(decoy)
+    # a dark area held by Light, so neither bonus applies: the plain rate
+    probe.tiles.update({(0, 0): DARK, (1, 0): DARK})
+    probe.pawns = {(0, 0): 0, (1, 0): 0}
+    probe.reserve = [6, 8]
+    check("a held area of two tiles scores two a tile",
+          probe.final_scores() == [4 - 36, -48], f"{probe.final_scores()}")
+
+    probe = AnarchessGame(2, seed=1)
+    probe.tiles = dict(decoy)
+    probe.tiles.update({(0, 0): LIGHT, (1, 0): LIGHT})
+    probe.pawns = {(0, 0): 0}                       # a lone holder
+    probe.reserve = [7, 8]
+    check("a single pawn holding an area scores three a tile",
+          probe.final_scores() == [6 - 42, -48], f"{probe.final_scores()}")
+
+    probe = AnarchessGame(2, seed=1)
+    probe.tiles = dict(decoy)
+    probe.tiles.update({(0, 0): LIGHT, (1, 0): LIGHT})
+    probe.pawns = {(0, 0): 0, (1, 0): 0}    # Light owns a light area, 2 pawns
+    probe.reserve = [6, 8]
+    check("an area matching its owner's colour scores three a tile",
+          probe.final_scores() == [6 - 36, -48], f"{probe.final_scores()}")
+
+    probe = AnarchessGame(2, seed=1)
+    probe.tiles = {(0, 0): LIGHT, (1, 0): LIGHT}       # this one is the largest
+    probe.pawns = {(0, 0): 0, (1, 0): 0}
+    probe.reserve = [6, 8]
+    check("the largest area is taxed down to one point a tile",
+          probe.final_scores() == [2 - 36, -48], f"{probe.final_scores()}")
+
+    # a whole game, played by the bots, ends with the last tile and a score
     bots = [AnarchessBot(0, 3), AnarchessBot(1, 3)]
-    game = AnarchessGame(2, AnarchessRules(random_colour=True), seed=5)
+    game = AnarchessGame(2, seed=5)
     steps = 0
     while not game.finished and steps < 400:
         for action in bots[game.current].choose(game):
@@ -488,7 +555,42 @@ def test_anarchess() -> None:
         steps += 1
     check("two bots finish a game", game.finished,
           f"{len(game.tiles)} tiles in {steps} turns, scores {game.scores}")
-    check("reconstruction rulings are documented", len(RULINGS) >= 6,
+    check("every tile is laid", game.tiles_left() == 0,
+          f"{game.total_tiles()} tiles")
+
+    # the one-player game forces the pawn action
+    solo = AnarchessGame(2, AnarchessRules(solo=True, tiles_per_colour=16),
+                         seed=11)
+    forced = True
+    while not solo.finished and solo.total_tiles() < 12:
+        acts = solo.legal_actions()
+        if not acts:
+            break
+        if solo.placed_tile:
+            acts = [a for a in acts if a.kind != "pass"]
+            if not acts:
+                break
+            forced = forced and all(
+                a.kind in ("settle", "attack", "move") for a in acts)
+        solo.apply(solo.rng.choice(acts))
+    check("the solo game forces the pawn action", forced,
+          f"solo total {solo.solo_score()}")
+
+    # Anarcheckers jumps instead of stepping
+    checkers = AnarchessGame(2, AnarchessRules(checkers=True,
+                                                tiles_per_colour=16), seed=2)
+    checkers.tiles = {(0, 0): LIGHT, (1, 1): DARK, (2, 2): LIGHT}
+    checkers.pawns = {(0, 0): 0, (1, 1): 1}
+    checkers.current = 0
+    checkers.placed_tile = True
+    checkers.last_tile = (0, 0)
+    acts = checkers.legal_pawn_actions()
+    check("Anarcheckers pieces jump over an enemy",
+          any(a.kind == "attack" and a.cell == (2, 2) and a.source == (0, 0)
+              for a in acts) and not any(a.kind == "move" for a in acts),
+          "the jump is compulsory")
+
+    check("every ruling is documented", len(RULINGS) >= 8,
           f"{len(RULINGS)} rulings recorded")
 
 

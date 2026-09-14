@@ -530,27 +530,33 @@ body.over .slide.active{outline:2px solid var(--accent)}
   <div class="body">
     <p class="lead">A real abstract strategy game by <b>Dimitris Grammenos</b>
       (ICS-FORTH, Heraklion). Two proud tribes, no kings yet, growing a
-      landscape out of 32 light and 32 dark tiles. Reconstructed from the
-      published summary and playtested here for 2, 3 and 4 players.</p>
+      landscape out of 32 light and 32 dark tiles. Implemented from the
+      designer's own rulebook rather than reconstructed from a summary — and
+      shipped with the two further variants he published: <b>Anarchess
+      SOLO</b> and <b>Anarcheckers</b>.</p>
     <div class="cols">
       <div>
         <h3>A turn</h3>
         <ol>
-          <li><b>Lay one tile</b> next to the land — you choose light or dark.</li>
+          <li>The <b>die names a colour</b>: that is the tile you must lay,
+            and the tribe of the <em>other</em> colour plays it.</li>
           <li><b>Then one pawn action</b>, if you want it: settle a pawn from
-            your reserve, step one square, or attack a neighbour.</li>
-          <li>Attacks only land when the attacker is <b>supported</b> by a
-            friendly pawn. A tribe fights together.</li>
+            your reserve onto the tile you just laid, step one square, or
+            attack across a diagonal.</li>
+          <li>A tile touching only one other must be of the <b>opposite</b>
+            colour. Attacks need no support — a lone pawn can take one.</li>
         </ol>
       </div>
       <div>
         <h3>Scoring</h3>
         <p>An <b>area</b> is a maximal group of edge-connected tiles of one
-          colour. When the last tile is laid, every area of two or more tiles
-          scores one point per tile to whoever has the most pawns on it.
-          Single tiles are worth nothing.</p>
-        <p><small>Every open question in the reconstruction is a switch and a
-          recorded ruling — see <code>lc/anarchess/rules.py</code>.</small></p>
+          colour. Areas of two or more tiles score for whichever tribe holds
+          most of them: <b>2</b> points a tile, <b>3</b> when the area matches
+          its owner's colour or is held by a lone pawn, but only <b>1</b> in
+          the largest area, which the rules tax. Single tiles are worth
+          nothing, and every pawn left in the reserve costs <b>6</b>.</p>
+        <p><small>SOLO is one player against a target of 192; Anarcheckers
+          steps and captures on the diagonals, with forced jumps.</small></p>
       </div>
     </div>
   </div>

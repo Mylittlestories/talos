@@ -24,7 +24,9 @@ export class AnarchessView {
       players: document.getElementById("an-players"),
       list: document.getElementById("an-players-list"),
       level: document.getElementById("an-level"),
-      bag: document.getElementById("an-bag"),
+      mode: document.getElementById("an-mode"),
+      tiles: document.getElementById("an-tiles"),
+      pass: document.getElementById("btn-anpass"),
     };
     this.state = null;
     this.legal = { tiles: [], pawns: [], can_pass: false };
@@ -49,17 +51,23 @@ export class AnarchessView {
       this.newGame();
     });
     this.el.level.addEventListener("change", () => this.app.set("anLevel", Number(this.el.level.value)));
-    this.el.bag.addEventListener("change", () => {
-      this.app.set("anBag", this.el.bag.checked);
-      this.newGame();
-    });
+    for (const key of ["mode", "tiles"]) {
+      this.el[key].addEventListener("change", () => {
+        this.app.set(key === "mode" ? "anMode" : "anTiles", this.el[key].value);
+        this.newGame();
+      });
+    }
     this.el.players.value = String(this.app.settings.anPlayers || 2);
     this.el.level.value = String(this.app.settings.anLevel || 2);
-    this.el.bag.checked = !!this.app.settings.anBag;
+    this.el.mode.value = String(this.app.settings.anMode || "standard");
+    this.el.tiles.value = String(this.app.settings.anTiles || 32);
   }
 
+  /** The die decides the tile colour, so all the client sets is the
+   *  variant and how big the land is. */
   rules() {
-    return { random_colour: !!this.el.bag.checked };
+    return { mode: this.el.mode.value,
+             tiles_per_colour: Number(this.el.tiles.value) };
   }
 
   async newGame() {
@@ -94,6 +102,7 @@ export class AnarchessView {
   async pass() {
     if (this.busy || !this.state || this.state.finished) return;
     if (!this.phase() || !this.legal.can_pass) return;
+    if (this.state.rules && this.state.rules.solo) return;   // forced in solo
     await this.apply({ kind: "pass" });
     await this.runBots();
   }
@@ -105,7 +114,8 @@ export class AnarchessView {
 
   async _click(event) {
     if (this.busy || !this.state || this.state.finished) return;
-    if (this.state.current !== 0) return;
+    const solo = !!(this.state.rules && this.state.rules.solo);
+    if (this.state.current !== 0 && !solo) return;   // in solo you play both
     const spot = this._cellAt(event);
     if (!spot) return;
     const cx = spot.cx;
@@ -114,10 +124,9 @@ export class AnarchessView {
     if (!this.phase()) {
       const cell = (this.legal.tiles || []).find((t) => t.x === cx && t.y === cy);
       if (!cell) return;
-      const light = spot.u + spot.v < 1;      // upper-right triangle is light
-      const colour = cell.colour !== undefined && this.legal.tiles.every(
-        (t) => !(t.x === cx && t.y === cy) || t.colour === cell.colour) ? cell.colour : null;
-      await this.apply({ kind: "tile", x: cx, y: cy, colour: colour === null ? (light ? 1 : 0) : colour });
+      // The die named the colour before the turn began; the client sends
+      // back the colour the server offered rather than picking one.
+      await this.apply({ kind: "tile", x: cx, y: cy, colour: cell.colour });
       if (this.state.placed && this.state.finished) return;
       await this.runBots();
       return;
@@ -151,6 +160,8 @@ export class AnarchessView {
 
   async runBots() {
     if (this.busy) return;
+    // SOLO is one human playing both tribes: there is nobody else to ask.
+    if (this.state && this.state.rules && this.state.rules.solo) return;
     this.busy = true;
     try {
       let guard = 0;
@@ -258,9 +269,14 @@ export class AnarchessView {
     // areas of two or more tiles are what score: outline them
     for (const area of this.state.areas) {
       if (area.size < 2) continue;
+      ctx.save();
       ctx.strokeStyle = area.owner === null || area.owner === undefined
         ? "rgba(240, 180, 41, 0.20)"
         : withAlpha(TRIBE_COLOURS[area.owner] || "#f0b429", 0.85);
+      if (area.taxed) {
+        // the largest area is taxed down to one point a tile: broken outline
+        ctx.setLineDash([Math.max(4, cell * 0.14), Math.max(3, cell * 0.10)]);
+      }
       ctx.lineWidth = Math.max(1.5, cell * 0.05);
       for (const [x, y] of area.cells) {
         ctx.beginPath();
@@ -275,29 +291,52 @@ export class AnarchessView {
         }
         ctx.stroke();
       }
+      ctx.restore();
     }
 
-    // where a tile may go: dashed, split in two - upper right light, lower left dark
+    // what each area is worth, so the tax and the bonuses are visible
+    if (cell > 24) {
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      for (const area of this.state.areas) {
+        if (area.size < 2) continue;
+        let mx = 0;
+        let my = 0;
+        for (const c of area.cells) { mx += c[0]; my += c[1]; }
+        mx /= area.cells.length;
+        my /= area.cells.length;
+        let best = area.cells[0];
+        let bd = Infinity;
+        for (const c of area.cells) {
+          const d = (c[0] - mx) ** 2 + (c[1] - my) ** 2;
+          if (d < bd) { bd = d; best = c; }
+        }
+        const owned = area.owner !== null && area.owner !== undefined;
+        const label = owned ? area.size + "x" + area.rate : String(area.size);
+        const bw = Math.max(20, cell * 0.62);
+        const bh = Math.max(12, cell * 0.27);
+        const bx = px(best[0]) + cell / 2 - bw / 2;
+        const by = py(best[1]) + cell - bh - Math.max(1.5, cell * 0.07);
+        ctx.fillStyle = "rgba(12, 14, 20, 0.80)";
+        roundRect(ctx, bx, by, bw, bh, Math.min(4, bh / 3));
+        ctx.fill();
+        ctx.fillStyle = owned ? (TRIBE_COLOURS[area.owner] || "#f0b429") : "#c8d0e0";
+        ctx.font = "600 " + Math.max(8, Math.round(cell * 0.21))
+          + "px system-ui, sans-serif";
+        ctx.fillText(label, bx + bw / 2, by + bh / 2 + 0.5);
+      }
+    }
+
+    // where a tile may go: one ghost, in the colour the die named
     if (this.state.current === 0 && !this.state.finished) {
       for (const t of this.legal.tiles || []) {
         const x0 = px(t.x) + pad;
         const y0 = py(t.y) + pad;
         const size = cell - pad * 2;
         ctx.save();
-        ctx.globalAlpha = 0.55;
-        ctx.fillStyle = LIGHT_TILE;
-        ctx.beginPath();
-        ctx.moveTo(x0 + size, y0);
-        ctx.lineTo(x0 + size, y0 + size);
-        ctx.lineTo(x0, y0);
-        ctx.closePath();
-        ctx.fill();
-        ctx.fillStyle = DARK_TILE;
-        ctx.beginPath();
-        ctx.moveTo(x0, y0 + size);
-        ctx.lineTo(x0 + size, y0 + size);
-        ctx.lineTo(x0, y0 + size);
-        ctx.closePath();
+        ctx.globalAlpha = 0.5;
+        ctx.fillStyle = this.state.drawn ? LIGHT_TILE : DARK_TILE;
+        roundRect(ctx, x0, y0, size, size, Math.max(2, cell * 0.08));
         ctx.fill();
         ctx.restore();
         ctx.save();
@@ -363,10 +402,14 @@ export class AnarchessView {
     const s = this.state;
     if (!s) return;
     this.el.status.textContent = s.status;
+    const solo = !!(s.rules && s.rules.solo);
+    this.el.pass.disabled = solo || s.finished;
     this.el.hint.textContent = s.finished
-      ? "Game over"
-      : s.current === 0
-        ? (this.phase() ? "Pawn action (optional)" : "Lay a tile")
+      ? (solo ? "Solo: " + s.solo_score + " of " + s.target + " points" : "Game over")
+      : s.current === 0 || solo
+        ? (this.phase()
+            ? (solo ? "Pawn action (forced)" : "Pawn action (optional)")
+            : "Lay a " + (s.drawn ? "light" : "dark") + " tile")
         : s.names[s.current] + " is thinking…";
     const rows = s.names.map((name, i) => {
       const onLand = s.pawns.filter((p) => p[2] === i).length;
@@ -379,7 +422,8 @@ export class AnarchessView {
     });
     this.el.list.innerHTML = rows.join("") +
       '<p class="dim small">Supply: ' + s.supply.light + " light, " +
-      s.supply.dark + " dark tiles · " + s.left + " left</p>";
+      s.supply.dark + " dark tiles · " + s.left + " left" +
+      (solo && s.target ? " · solo target " + s.target : "") + "</p>";
   }
 }
 

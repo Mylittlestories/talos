@@ -24,7 +24,8 @@ from typing import Any, Dict, List, Optional
 import chess
 
 from lc.anarchess.ai import AnarchessBot
-from lc.anarchess.rules import (AnarchessAction, AnarchessGame, AnarchessRules,
+from lc.anarchess.rules import (SOLO_PERFECT_SCORE, AnarchessAction,
+                            AnarchessGame, AnarchessRules,
                                LIGHT)
 from lc.core.engine import DEFAULT_LEVELS, LCEngine, Level, level_by_name
 from lc.variants.anarchchess import AnarchBoard, AnarchRules, RULE_BOOK
@@ -231,31 +232,59 @@ def anarch_rules() -> str:
 # --------------------------------------------------------------------------
 # Anarchess
 # --------------------------------------------------------------------------
+# The dials a browser client is allowed to set.  ``random_colour`` and
+# ``attack_needs_support`` survive as read-only properties for old callers, so
+# the guard below skips anything that cannot be assigned.
+ANARCHESS_RULE_FIELDS = (
+    "tiles_per_colour", "draw_tile_colour", "single_touch_opposite",
+    "diagonal_attack", "captives_return", "pawn_action_on_last_tile",
+    "protect_last_move", "tax_largest_area", "same_colour_bonus",
+    "reserve_penalty", "min_area", "solo", "checkers")
+
+
 def _rules_from(data: Any) -> AnarchessRules:
     rules = AnarchessRules()
-    for key, value in (_loads(data) or {}).items():
-        if hasattr(rules, key):
-            setattr(rules, key, value)
+    payload = dict(_loads(data) or {})
+    mode = payload.pop("mode", None)
+    for key, value in payload.items():
+        if key not in ANARCHESS_RULE_FIELDS:
+            continue
+        if isinstance(getattr(type(rules), key, None), property):
+            continue                       # a compatibility alias, not a dial
+        setattr(rules, key, value)
+    if mode == "solo":
+        rules.solo, rules.checkers = True, False
+    elif mode == "checkers":
+        rules.solo, rules.checkers = False, True
     return rules
 
 
 def _snapshot(game: AnarchessGame) -> Dict[str, Any]:
     areas = []
+    largest = max((len(g) for g in game.areas()), default=0)
     for group in game.areas():
+        owner = game.area_control(group)
         areas.append({"size": len(group),
-                      "owner": game.area_control(group),
+                      "owner": owner,
+                      "rate": game.area_tile_rate(
+                          group, game.current if owner is None else owner,
+                          largest),
+                      "taxed": bool(game.rules.tax_largest_area
+                                    and len(group) == largest),
                       "cells": [list(cell) for cell in group]})
     return {
         "players": game.players,
         "names": list(game.names),
-        "rules": {k: getattr(game.rules, k) for k in
-                  ("random_colour", "captives_return", "attack_needs_support",
-                   "score_per_tile", "final_tile_ends_game")},
+        "rules": {k: getattr(game.rules, k) for k in ANARCHESS_RULE_FIELDS},
+        "largest": largest,
+        "target": SOLO_PERFECT_SCORE if game.rules.solo else None,
+        "solo_score": game.solo_score() if game.rules.solo else None,
         "tiles": [[x, y, 1 if colour else 0] for (x, y), colour in game.tiles.items()],
         "pawns": [[x, y, owner] for (x, y), owner in game.pawns.items()],
         "current": game.current,
         "turn": game.turn_number,
         "placed": game.placed_tile,
+        "last_tile": list(game.last_tile) if game.last_tile else None,
         "used": game.used_pawn_action,
         "finished": game.finished,
         "drawn": game.drawn,
@@ -285,8 +314,14 @@ def _restore(state: Any) -> AnarchessGame:
     game.current = int(state.get("current", 0))
     game.turn_number = int(state.get("turn", 1))
     game.placed_tile = bool(state.get("placed", False))
+    last = state.get("last_tile")
+    # A pawn may only be settled onto the tile that was just laid, so a
+    # snapshot that forgets it comes back unable to settle at all.
+    game.last_tile = (int(last[0]), int(last[1])) if last else None
     game.used_pawn_action = bool(state.get("used", False))
     game.finished = bool(state.get("finished", False))
+    if state.get("final"):
+        game.scores = [int(v) for v in state["final"]]
     game.drawn = state.get("drawn", None)
     return game
 

@@ -14,8 +14,9 @@ from PyQt6.QtWidgets import (QCheckBox, QComboBox, QFrame, QGridLayout, QGroupBo
 
 from .ai import LEVELS, AnarchessBot
 from .rules import (DARK, LIGHT, PAWNS_PER_PLAYER, PLAYER_COLOURS,
-                    PLAYER_NAMES, AnarchessAction, AnarchessGame,
-                    AnarchessRules, RULINGS, neighbours)
+                    PLAYER_NAMES, RULINGS, SOLO_PERFECT_SCORE,
+                    AnarchessAction, AnarchessGame, AnarchessRules,
+                    neighbours)
 from .widget import AnarchessBoard
 
 BOT_DELAY_MS = 260
@@ -175,9 +176,13 @@ class AnarchessView(QWidget):
         self.board.canvas.set_game(game)
         self.human_seat = int(cfg.get("human", 0))
         seats: List[Optional[AnarchessBot]] = []
+        kinds = cfg.get("seats") or ["human"] + ["bot"] * (players - 1)
+        if rules.solo:
+            # one player plays both tribes, so no seat may go to a bot
+            kinds = ["human"] * players
         for i in range(players):
-            kind = (cfg.get("seats") or ["human"] + ["bot"] * (players - 1))
-            kind = kind[i] if i < len(kind) else "bot"
+            kind = kinds[i] if i < len(kinds) else ("human" if rules.solo
+                                                    else "bot")
             if kind == "human":
                 seats.append(None)
                 self.human_seat = i
@@ -334,31 +339,30 @@ class AnarchessView(QWidget):
 
         self.turn_label.setText(f"Turn {game.turn_number}")
         if game.finished:
-            self.phase_label.setText("Game over")
+            if game.rules.solo:
+                self.phase_label.setText(
+                    f"Solo: {game.solo_score()} of {SOLO_PERFECT_SCORE} points")
+            else:
+                self.phase_label.setText("Game over")
         else:
             phase = ("1. lay a tile" if not game.placed_tile
-                     else "2. pawn action (optional)")
+                     else ("2. pawn action (forced)" if game.rules.solo
+                           else "2. pawn action (optional)"))
+            drawn = ("light" if game.drawn else "dark") if game.drawn is not None else "?"
             self.phase_label.setText(
-                f"{game.names[game.current]} - {phase} - "
-                f"{game.tiles_left()} tiles left")
+                f"{game.names[game.current]} - {phase} - the die says "
+                f"{drawn} - {game.tiles_left()} tiles left")
         self.supply_label.setText(
             f"light {game.supply[LIGHT]}   dark {game.supply[DARK]}   "
-            f"land {len(game.tiles)} tiles"
-            + ("   (bag: the tile is drawn for you)"
-               if game.rules.random_colour else ""))
+            f"land {len(game.tiles)} tiles")
+        # The die decides the colour: the buttons only show which one is up.
         for colour, btn in self.colour_buttons.items():
-            btn.setEnabled(not game.rules.random_colour
-                           and game.supply[colour] > 0)
-        if game.rules.random_colour:
-            if game.drawn is not None:
-                self._pick_colour(game.drawn)
-        elif game.supply.get(canvas.selected_colour, 0) <= 0:
-            # never leave the player holding a colour that has run out
-            for colour in (LIGHT, DARK):
-                if game.supply[colour] > 0:
-                    self._pick_colour(colour)
-                    break
-        self.skip_button.setEnabled(self._my_turn() and game.placed_tile)
+            btn.setEnabled(False)
+            btn.setChecked(game.drawn == colour)
+        if game.drawn is not None:
+            self._pick_colour(game.drawn)
+        self.skip_button.setEnabled(self._my_turn() and game.placed_tile
+                                    and not game.rules.solo)
         scores = game.live_scores()
         for i, row in enumerate(self.rows):
             row.update(game.reserve[i], scores[i],

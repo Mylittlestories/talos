@@ -5,7 +5,8 @@ from __future__ import annotations
 from typing import Dict, List, Optional
 
 from PyQt6.QtWidgets import (QCheckBox, QComboBox, QDialog, QDialogButtonBox,
-                             QGroupBox, QHBoxLayout, QLabel, QVBoxLayout, QWidget)
+                             QFormLayout, QGroupBox, QHBoxLayout, QLabel,
+                             QSpinBox, QVBoxLayout, QWidget)
 
 from .ai import LEVELS
 from .rules import PAWNS_PER_PLAYER, PLAYER_NAMES, AnarchessRules
@@ -49,20 +50,49 @@ class AnarchessDialog(QDialog):
         layout.addWidget(self.seats_box)
 
         opts = QGroupBox("Rules")
-        opts_layout = QVBoxLayout(opts)
-        self.bag = QCheckBox("Draw tiles from a bag (colour is not a choice)")
-        self.bag.setChecked(rules.random_colour)
-        self.bag.setToolTip(
-            "The published summary does not say whether you choose the tile "
-            "colour or draw it.  Drawing gives a more varied landscape.")
-        self.support = QCheckBox("Attacks need a supporting pawn")
-        self.support.setChecked(rules.attack_needs_support)
-        self.captives = QCheckBox("Captured pawns return to the reserve")
+        opts_form = QFormLayout(opts)
+
+        self.tile_count = QComboBox()
+        for count, label in ((16, "16 of each colour - a short game"),
+                             (24, "24 of each colour"),
+                             (32, "32 of each colour - the full land")):
+            self.tile_count.addItem(label, count)
+        self.tile_count.setCurrentIndex(
+            max(0, self.tile_count.findData(rules.tiles_per_colour)))
+        opts_form.addRow("Tiles", self.tile_count)
+
+        self.mode = QComboBox()
+        self.mode.addItem("Two tribes", "standard")
+        self.mode.addItem("Solo - one player, target 192", "solo")
+        self.mode.addItem("Anarcheckers - pieces jump", "checkers")
+        self.mode.setCurrentIndex(
+            self.mode.findData("solo" if rules.solo else
+                               ("checkers" if rules.checkers else "standard")))
+        self.mode.currentIndexChanged.connect(self._sync)
+        opts_form.addRow("Game", self.mode)
+
+        self.single_touch = QCheckBox(
+            "A tile touching one other must be the opposite colour")
+        self.single_touch.setChecked(rules.single_touch_opposite)
+        self.protect_last = QCheckBox(
+            "On the last turn a pawn may not move where it can be attacked")
+        self.protect_last.setChecked(rules.protect_last_move)
+        self.tax = QCheckBox("The largest area is taxed to one point a tile")
+        self.tax.setChecked(rules.tax_largest_area)
+        self.bonus = QCheckBox(
+            "An area matching its owner's colour scores three a tile")
+        self.bonus.setChecked(rules.same_colour_bonus)
+        self.captives = QCheckBox("Captured pawns return to their reserve")
         self.captives.setChecked(rules.captives_return)
-        self.per_tile = QCheckBox("Score one point per tile (not per area)")
-        self.per_tile.setChecked(rules.score_per_tile)
-        for box in (self.bag, self.support, self.captives, self.per_tile):
-            opts_layout.addWidget(box)
+        for box in (self.single_touch, self.protect_last, self.tax,
+                    self.bonus, self.captives):
+            opts_form.addRow(box)
+
+        self.penalty = QSpinBox()
+        self.penalty.setRange(0, 12)
+        self.penalty.setValue(rules.reserve_penalty)
+        self.penalty.setSuffix(" points")
+        opts_form.addRow("Pawn left in the reserve", self.penalty)
         layout.addWidget(opts)
 
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok |
@@ -81,11 +111,16 @@ class AnarchessDialog(QDialog):
                 item.widget().deleteLater()
         self.seat_combos = []
         n = self.players.currentData()
+        # SOLO is one player against a target of 192 playing *both* tribes,
+        # so there is no opponent to hand a seat to.
+        solo = self.mode.currentData() == "solo"
+        self.level.setEnabled(not solo)
         for i in range(n):
             combo = QComboBox()
             combo.addItem("Human", "human")
             combo.addItem("Computer", "bot")
-            combo.setCurrentIndex(0 if i == 0 else 1)
+            combo.setCurrentIndex(0 if (i == 0 or solo) else 1)
+            combo.setEnabled(not solo)
             self.seats_layout.addWidget(combo)
             self.seat_combos.append(combo)
 
@@ -100,8 +135,13 @@ class AnarchessDialog(QDialog):
             "level": self.level.currentIndex() + 1,
             "names": PLAYER_NAMES[:self.players.currentData()],
             "rules": AnarchessRules(
-                random_colour=self.bag.isChecked(),
-                attack_needs_support=self.support.isChecked(),
+                tiles_per_colour=self.tile_count.currentData(),
+                solo=self.mode.currentData() == "solo",
+                checkers=self.mode.currentData() == "checkers",
+                single_touch_opposite=self.single_touch.isChecked(),
+                protect_last_move=self.protect_last.isChecked(),
+                tax_largest_area=self.tax.isChecked(),
+                same_colour_bonus=self.bonus.isChecked(),
                 captives_return=self.captives.isChecked(),
-                score_per_tile=self.per_tile.isChecked()),
+                reserve_penalty=self.penalty.value()),
         }

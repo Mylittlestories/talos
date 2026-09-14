@@ -17,7 +17,8 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional, Sequence, Tuple
 
-from PyQt6.QtCore import QPoint, QRect, QRectF, QSize, Qt, pyqtSignal
+from PyQt6.QtCore import (QLineF, QPoint, QRect, QRectF, QSize, Qt,
+                          pyqtSignal)
 from PyQt6.QtGui import QColor, QFont, QPainter, QPen, QBrush, QMouseEvent
 from PyQt6.QtWidgets import (QFrame, QScrollArea, QSizePolicy, QVBoxLayout,
                              QWidget)
@@ -172,6 +173,26 @@ class AnarchessCanvas(QWidget):
     # ------------------------------------------------------------------
     # painting
     # ------------------------------------------------------------------
+    def _area_segments(self, group) -> List[QLineF]:
+        """The outline of an area, as the sides that face no neighbour of the
+        same colour.  Drawing only those sides is what makes an area read as
+        one shape instead of as a pile of squares."""
+        cells = set(group)
+        out: List[QLineF] = []
+        for cell in cells:
+            r = self.rect_for(*cell).adjusted(1, 1, -1, -1)
+            x, y, w, h = r.x(), r.y(), r.width(), r.height()
+            cx, cy = cell
+            if (cx, cy + 1) not in cells:
+                out.append(QLineF(x, y, x + w, y))
+            if (cx, cy - 1) not in cells:
+                out.append(QLineF(x, y + h, x + w, y + h))
+            if (cx - 1, cy) not in cells:
+                out.append(QLineF(x, y, x, y + h))
+            if (cx + 1, cy) not in cells:
+                out.append(QLineF(x + w, y, x + w, y + h))
+        return out
+
     def paintEvent(self, event) -> None:  # noqa: N802
         game = self.game
         painter = QPainter(self)
@@ -190,18 +211,58 @@ class AnarchessCanvas(QWidget):
                     continue
                 painter.drawRect(self.rect_for(cx, cy).adjusted(1, 1, -1, -1))
 
-        # ---- area ownership tint
+        # ---- areas: tint, then an outline, then what each one is worth
+        groups = game.areas()
+        largest = max((len(g) for g in groups), default=0)
+        labels: List[Tuple[QRectF, str, QColor]] = []
         if self.show_areas:
-            for group in game.areas():
+            for group in groups:
                 if len(group) < game.rules.min_area:
                     continue
                 owner = game.area_control(group)
-                if owner is None:
-                    continue
-                colour = _player_colour(owner, 42)
-                for cell in group:
-                    r = self.rect_for(*cell).adjusted(1, 1, -1, -1)
-                    painter.fillRect(r, colour)
+                if owner is not None:
+                    tint = _player_colour(owner, 42)
+                    for cell in group:
+                        r = self.rect_for(*cell).adjusted(1, 1, -1, -1)
+                        painter.fillRect(r, tint)
+                taxed = (game.rules.tax_largest_area and len(group) == largest
+                         and len(group) >= game.rules.min_area)
+                contested = owner is None and any(
+                    c in game.pawns for c in group)
+                if owner is not None:
+                    edge = _player_colour(owner, 235)
+                    width = 3.0
+                else:
+                    edge = QColor(160, 172, 196, 170)
+                    width = 1.8
+                pen = QPen(edge, width)
+                if taxed:
+                    # the largest area is the one the rulebook taxes down to
+                    # one point a tile, so it wears a broken outline
+                    pen.setStyle(Qt.PenStyle.DashLine)
+                elif contested:
+                    pen.setStyle(Qt.PenStyle.DotLine)
+                painter.setPen(pen)
+                for line in self._area_segments(group):
+                    painter.drawLine(line)
+
+                # a label on the tile nearest the middle of the area
+                rate = game.area_tile_rate(
+                    group, game.current if owner is None else owner, largest)
+                text = (f"{len(group)}x{rate}" if owner is not None
+                        else f"{len(group)}")
+                cxs = [c[0] for c in group]
+                cys = [c[1] for c in group]
+                mid = ((min(cxs) + max(cxs)) / 2, (min(cys) + max(cys)) / 2)
+                anchor = min(group, key=lambda c: (c[0] - mid[0]) ** 2
+                            + (c[1] - mid[1]) ** 2)
+                r = self.rect_for(*anchor)
+                labels.append((QRectF(r.center().x() - s * 0.34,
+                                      r.bottom() - s * 0.42,
+                                      s * 0.68, s * 0.30),
+                               text,
+                               edge if owner is not None
+                               else QColor(200, 208, 224)))
 
         # ---- tiles
         for cell, colour in game.tiles.items():
@@ -210,8 +271,15 @@ class AnarchessCanvas(QWidget):
             painter.setPen(QPen(TILE_EDGE, 1))
             painter.drawRect(r)
             if cell == self.last_cell:
-                painter.setPen(QPen(QColor("#f0b429"), 2.5))
+                # Under the published rules a pawn may only be settled onto
+                # the tile that was just laid, so it gets a ring you can see
+                # from across the room.
+                painter.setPen(QPen(QColor("#f0b429"), 3.2))
                 painter.drawRect(r.adjusted(1.5, 1.5, -1.5, -1.5))
+                if game.placed_tile and self.settle_cells:
+                    painter.setPen(QPen(QColor("#f0b429"), 1.6,
+                                        Qt.PenStyle.DotLine))
+                    painter.drawRect(r.adjusted(-3, -3, 3, 3))
 
         # ---- legal placements
         if self.legal_cells:
@@ -266,6 +334,15 @@ class AnarchessCanvas(QWidget):
                 painter.drawEllipse(cx, radius + 5, radius + 5)
             painter.setPen(QColor(20, 22, 28))
             painter.drawText(r, Qt.AlignmentFlag.AlignCenter, str(owner + 1))
+
+        # ---- what each area scores, last so nothing covers it
+        for box, text, colour in labels:
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QBrush(QColor(12, 14, 20, 190)))
+            painter.drawRoundedRect(box, 4, 4)
+            painter.setPen(QPen(colour, 1))
+            painter.setFont(QFont("Sans", max(7, int(s * 0.17))))
+            painter.drawText(box, Qt.AlignmentFlag.AlignCenter, text)
 
         # ---- coordinate hints
         painter.setPen(QColor("#3a4356"))

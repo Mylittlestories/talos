@@ -179,7 +179,9 @@ def _call(fn, *args):
 
   // anarchess: a full turn for every player, driven by the bot
   const game = bridge("anarchess_new", 2, null, 12345);
-  check(game.tiles.length === 0 && game.players === 2, "anarchess_new");
+  // the published opening is four tiles, the two light ones diagonal
+  check(game.tiles.length === 4 && game.players === 2,
+    "anarchess_new opens on four tiles", game.tiles.length + " tiles");
   let state = game;
   let turns = 0;
   while (!state.finished && state.tiles.length < 8 && turns < 40) {

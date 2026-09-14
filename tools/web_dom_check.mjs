@@ -182,15 +182,36 @@ console.log("\nanarchess");
 await app.show("anarchess");
 const an = app.views.anarchess;
 check(!!an.state, "a game was created");
-check(an.state.tiles.length === 0 && an.state.current === 0,
-  "the land starts empty and the human is first");
-await an._click({ clientX: an.ox + an.cell * 0.80, clientY: an.oy + an.cell * 0.10 });
-check(an.state.tiles.length === 1, "clicking lays a tile");
-check(an.state.tiles[0][2] === 1, "the upper-right half of the cell means light",
-  an.state.tiles[0][2] ? "light" : "dark");
+// The view's game may already be under way, so the opening is asserted on a
+// pristine state asked straight from the engine.
+const fresh = await an.app.engine.json("anarchess_new",
+  [2, JSON.stringify(an.rules()), 20240914]);
+check(fresh.tiles.length === 4, "the published opening is four tiles",
+  fresh.tiles.length + " tiles");
+const openingLight = fresh.tiles.filter((t) => t[2] === 1).length;
+check(openingLight === 2, "two of them light", openingLight + " light");
+check(fresh.drawn === true || fresh.drawn === false,
+  "the die has already named a colour");
+// the die sends the opposite colour first, so let the bots have their turn
+// before the human is asked to click anything
+await an.runBots();
+const clickCell = (cx, cy) => an._click({
+  clientX: an.ox + (cx + 0.5) * an.cell,
+  clientY: an.oy + (cy + 0.5) * an.cell,
+});
+const before = an.state.tiles.length;
+const spot = (an.legal.tiles || [])[0];
+check(!!spot, "the human has a legal tile to lay");
+await clickCell(spot.x, spot.y);
+check(an.state.tiles.length === before + 1, "clicking lays a tile",
+  an.state.tiles.length + " tiles");
+const laid = an.state.tiles.find((t) => t[0] === spot.x && t[1] === spot.y);
+check(!!laid && laid[2] === spot.colour, "it is the colour the die named",
+  laid ? (laid[2] ? "light" : "dark") : "no tile");
 check(an.phase() === true, "and it becomes the pawn-action phase");
 await an.pass();
-check(an.state.tiles.length >= 2, "the bots answer", an.state.tiles.length + " tiles");
+check(an.state.tiles.length >= before + 2, "the bots answer",
+  an.state.tiles.length + " tiles");
 check(an.state.current === 0, "the turn comes back round");
 check($("an-players-list").textContent.includes("Light"), "the tribe panel is filled");
 
