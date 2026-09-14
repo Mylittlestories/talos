@@ -243,7 +243,11 @@ jobs:
           distribution: temurin
           java-version: "21"
           cache: gradle
+      # Avoid setup-android's obsolete `tools` default; Android's current
+      # platform-tools package is all this Gradle build needs from the action.
       - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
       - name: Install the Android 35 build platform
         run: |
           yes | sdkmanager --licenses >/dev/null || true

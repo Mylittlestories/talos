@@ -86,6 +86,9 @@ Nothing yet.
   selected engine profile field and its depth cap instead of searching all
   levels to an unrestricted depth; the Warlord browser profile is no longer
   silently limited to Strategist strength.
+- **Android tag builds survive the current hosted SDK image.** The Android
+  setup action now requests `platform-tools` explicitly instead of its retired
+  default `tools` package, allowing the APK build and verifier to run.
 
 ---
 

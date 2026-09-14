@@ -19,6 +19,12 @@ head, being flattened, or shattering into simulated debris.
 
 Everything runs on your machine. No accounts, no servers, no telemetry.
 
+> **New in 2.2.0 — Three lands, sharper play.** The improved edition brings
+> three independently persistent land games, a fifteen-tier chess ladder,
+> smarter territory opponents, a paced procedural Battle Chess stage, responsive
+> browser boards, dependable player-data storage, and native delivery for
+> Windows, Linux and Android. [Read the full 2.2.0 notes](CHANGELOG.md#220--three-lands-sharper-play).
+
 ```
 python run.py
 ```
@@ -30,7 +36,7 @@ python run.py
 | Edition | How you get it | Notes |
 |---|---|---|
 | **Browser** | **[Play now](https://mylittlestories.github.io/talos/web/)** — or serve `web/` locally | nothing to install; works offline after its first successful visit |
-| **Android APK** | `talos-android-<version>-debug.apk` in every tag release; a signed `…-release.apk` is attached when the maintainer configures signing | native Android WebView shell, API 23+; sideload the debug APK for testing |
+| **Android APK** | `talos-android-<version>-debug.apk` in every completed tag release; a signed `…-release.apk` is attached when the maintainer configures signing | native Android WebView shell, API 23+; sideload the debug APK for testing |
 | **Windows** | `talos-<version>-windows-x86_64-setup.exe` or `…-portable.zip` from the release | proper per-user installer, optional `.pgn` “Open with” entry that loads the selected game, no administrator prompt |
 | **Linux** | `talos-<version>-linux-x86_64.tar.gz` → extract → `./install.sh` | self-contained PyInstaller bundle; installs into `~/.local` with a working desktop launcher, icon and AppStream metadata |
 | **macOS** | `talos-<version>-macos-universal.zip` | unsigned app bundle; right-click → Open on its first launch |
