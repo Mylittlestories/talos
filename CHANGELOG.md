@@ -16,6 +16,39 @@ Nothing yet.
 
 ---
 
+## [2.0.3] — The name on the box
+
+An audit of what the project claims about itself, prompted by a screenshot of
+the About box.
+
+### Fixed
+
+- **The About box said "Lucas Chess NX"**, the project's old name, and listed
+  a feature set two releases out of date. It now says TALOS, shows the mark at
+  96 px, and states the version. Its numbers are counted from the code - the
+  levels, the Elo range, the personalities and the variants - so they cannot
+  drift away from reality again. Which they had: the old text claimed ten
+  variants and 109 engine levels. There are twelve variants and twelve levels,
+  800 to 2250 Elo.
+- **The old name survived in nine other places**: four package docstrings, the
+  self test, the fake UCI engine used by the tests, and the environment setup
+  script. All now say TALOS. The changelog keeps its historical mention.
+- **The browser edition reported version 2.0.0** regardless of what it was.
+  The version is now read from `lc/__init__.py` and stamped into the bundle at
+  build time, since that file is deliberately not shipped to the browser.
+- **The presentation deck was frozen at 2.0.0**, including the release slide
+  that told you to tag `v2.0.0`. It reads the version from the code too, so
+  every rebuild is current.
+- **The PWA manifest described 15,000 puzzles.** The library holds 112,198;
+  the page description was right and only the manifest was understating it.
+
+### Added
+
+- **The repository shows the icon.** The README now leads with the mark, the
+  current release badge, a live play-in-browser badge and the licence.
+
+---
+
 ## [2.0.2] — The icon and the room to play
 
 ### Fixed

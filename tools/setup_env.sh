@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Prepare the sandbox / dev machine to run Lucas Chess NX.
+# Prepare the sandbox / dev machine to run TALOS.
 # On a normal Linux desktop only the pip line is needed.
 set -e
 python3 -m pip install --quiet --upgrade pip

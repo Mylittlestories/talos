@@ -1,1 +1,1 @@
-"""Lucas Chess NX package."""
+"""TALOS package."""

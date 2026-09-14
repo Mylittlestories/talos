@@ -43,6 +43,17 @@ PAGES = "https://mylittlestories.github.io/talos/"
 # facts, straight from the source
 # --------------------------------------------------------------------------
 
+def read_version() -> str:
+    """The version in lc/__init__.py, read without importing the package."""
+    import re
+    path = os.path.join(ROOT, "lc", "__init__.py")
+    with open(path, encoding="utf-8") as fh:
+        found = re.search(r'^APP_VERSION\s*=\s*"([^"]+)"', fh.read(), re.M)
+    if not found:
+        raise SystemExit(f"no APP_VERSION in {path}")
+    return found.group(1)
+
+
 def counts() -> dict:
     info = {"puzzles": 0, "sets": 0, "games": 0, "kinds": []}
     if not os.path.exists(DB):
@@ -612,7 +623,7 @@ __RULES__
           versions, a packaging smoke build, and the browser smoke test.</p>
       </div>
       <div class="step">
-        <h4>Tag <code>v2.0.0</code></h4>
+        <h4>Tag <code>v__VERSION__</code></h4>
         <p>Three build jobs produce a Windows zip, a Linux tarball and a macOS
           app zip, and a release job lifts that version's section out of
           <code>CHANGELOG.md</code>.</p>
@@ -792,7 +803,7 @@ def main() -> int:
     inner = svg.split(">", 1)[1].rsplit("</svg>", 1)[0]
 
     info = counts()
-    version = "2.0.0"
+    version = read_version()
     html = TEMPLATE
     html = html.replace("__ICON__", svg)
     html = html.replace("__ICONG__", inner)

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Headless self test for Lucas Chess NX.
+Headless self test for TALOS.
 
     python tools/selftest.py
 

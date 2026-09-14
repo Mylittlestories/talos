@@ -21,7 +21,7 @@ APP_NAME = "TALOS"
 APP_TAGLINE = "The Living Chess Studio"
 
 #: Version string.
-APP_VERSION = "2.0.2"
+APP_VERSION = "2.0.3"
 
 #: Full display name, e.g. "TALOS - The Living Chess Studio".
 APP_FULL_NAME = f"{APP_NAME} - {APP_TAGLINE}"

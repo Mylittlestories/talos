@@ -35,6 +35,17 @@ ASSETS = os.path.join(ROOT, "assets")
 SRC = os.path.join(WEB, "python_src")
 
 #: repo file -> path inside the Pyodide filesystem
+def read_version() -> str:
+    """The version in lc/__init__.py, read without importing the package."""
+    import re
+    path = os.path.join(ROOT, "lc", "__init__.py")
+    with open(path, encoding="utf-8") as fh:
+        found = re.search(r'^APP_VERSION\s*=\s*"([^"]+)"', fh.read(), re.M)
+    if not found:
+        raise SystemExit(f"no APP_VERSION in {path}")
+    return found.group(1)
+
+
 MODULES = {
     "lc/core/engine.py": "lc/core/engine.py",
     "lc/variants/anarchchess.py": "lc/variants/anarchchess.py",
@@ -70,6 +81,14 @@ def build_python() -> int:
         print(f"  missing {bridge}", file=sys.stderr)
         return 1
     shutil.copyfile(bridge, os.path.join(PYDIR, "bridge.py"))
+    # stamp the version in: lc/__init__.py is deliberately not in the bundle,
+    # so the bridge cannot read it at run time
+    target = os.path.join(PYDIR, "bridge.py")
+    with open(target, encoding="utf-8") as fh:
+        text = fh.read()
+    text = text.replace("__APP_VERSION__", read_version())
+    with open(target, "w", encoding="utf-8") as fh:
+        fh.write(text)
 
     print(f"python: {copied} modules + bridge -> web/python")
     return 0

@@ -1,7 +1,7 @@
 {
   "name": "TALOS — The Living Chess Studio",
   "short_name": "TALOS",
-  "description": "A local chess studio that runs entirely on your device: the TALOS engine, 15,000 Lucas Chess puzzles, Anarchess and Anarchchess.",
+  "description": "A local chess studio that runs entirely on your device: the TALOS engine, 112,000 Lucas Chess puzzles, Anarchess and Anarchchess.",
   "lang": "en",
   "dir": "ltr",
   "start_url": "./index.html",

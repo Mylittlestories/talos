@@ -74,11 +74,25 @@ def _engine_for(level_name: str, movetime_ms: int) -> LCEngine:
     return _ENGINE
 
 
+def _app_version() -> str:
+    """The version this build was stamped with.
+
+    ``tools/build_web.py`` copies this file into the browser bundle and
+    replaces the placeholder with the real version, because ``lc/__init__.py``
+    is not part of the bundle. Running from source, ask the package instead.
+    """
+    try:
+        from lc import APP_VERSION
+        return APP_VERSION
+    except Exception:
+        return "__APP_VERSION__"
+
+
 def about() -> str:
     """What the page shows in the Rules tab and the footer."""
     return json.dumps({
         "app": "TALOS",
-        "version": "2.0.0",
+        "version": _app_version(),
         "python": sys.version.split()[0],
         "pyodide": sys.platform,
         "chess": getattr(chess, "__version__", "unknown"),

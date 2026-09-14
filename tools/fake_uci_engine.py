@@ -32,7 +32,7 @@ def main() -> int:
             continue
         if command == "uci":
             print("id name FakeUCI 0.1")
-            print("id author Lucas Chess NX self test")
+            print("id author TALOS self test")
             print("option name MultiPV type spin default 1 min 1 max 8")
             print("option name Skill Level type spin default 20 min 0 max 20")
             print("option name UCI_Elo type spin default 3190 min 1320 max 3190")

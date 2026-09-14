@@ -1,4 +1,15 @@
-# TALOS — The Living Chess Studio
+<p align="center">
+  <img src="assets/talos-256.png" alt="TALOS" width="128">
+</p>
+
+<h1 align="center">TALOS — The Living Chess Studio</h1>
+
+<p align="center">
+  <a href="https://github.com/Mylittlestories/talos/releases/latest"><img src="https://img.shields.io/github/v/release/Mylittlestories/talos?label=download" alt="Latest release"></a>
+  <a href="https://mylittlestories.github.io/talos/"><img src="https://img.shields.io/badge/play%20in%20browser-live-2f6f4f" alt="Play in browser"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/licence-GPLv2%2B-blue" alt="Licence"></a>
+</p>
+
 
 A modern, fully local chess playing, training and *land-building* suite,
 inspired by [Lucas Chess](https://github.com/lukasmonk/lucaschess) and advanced

@@ -6,11 +6,13 @@ promotion, about.
 from __future__ import annotations
 
 import os
+import sys
 from typing import Dict, List, Optional
 
 import chess
 
 from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import (QCheckBox, QComboBox, QDialog, QDialogButtonBox, QDoubleSpinBox,
                              QFileDialog, QFormLayout, QGridLayout, QGroupBox, QHBoxLayout,
                              QLabel, QLineEdit, QListWidget, QMessageBox, QPlainTextEdit,
@@ -474,23 +476,65 @@ class PositionDialog(QDialog):
         return self.edit.toPlainText().strip()
 
 
+def _app_logo(size: int = 96):
+    """The TALOS mark, for dialogs. Falls back to nothing if assets are away."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    root = os.path.dirname(os.path.dirname(here))
+    for name in ("assets/talos-256.png", "assets/talos-128.png",
+                 "assets/talos-64.png", "assets/talos-48.png"):
+        for base in (getattr(sys, "_MEIPASS", root), root):
+            path = os.path.join(base, name)
+            if os.path.exists(path):
+                pm = QPixmap(path)
+                if not pm.isNull():
+                    return pm.scaled(size, size, Qt.AspectRatioMode.KeepAspectRatio,
+                                     Qt.TransformationMode.SmoothTransformation)
+    return QPixmap()
+
+
 def about_dialog(parent=None) -> QMessageBox:
+    """About TALOS: the mark, the version and what is actually in the box."""
+    from .. import APP_NAME, APP_TAGLINE, APP_VERSION
+
+    from ..core.engine import DEFAULT_LEVELS
+    from ..core.game import VARIANTS
+    try:
+        from ..core.players import BuiltInPlayer
+        styles = len(BuiltInPlayer.PERSONALITIES)
+    except Exception:                                    # pragma: no cover
+        styles = 7
+    levels = len(DEFAULT_LEVELS)
+    elo_lo = min(lv.elo for lv in DEFAULT_LEVELS)
+    elo_hi = max(lv.elo for lv in DEFAULT_LEVELS)
+    variants = len([v for v in VARIANTS if str(v).lower() != "standard"])
+
     box = QMessageBox(parent)
-    box.setWindowTitle("About Lucas Chess NX")
+    box.setWindowTitle(f"About {APP_NAME}")
+    logo = _app_logo(96)
+    if not logo.isNull():
+        box.setIconPixmap(logo)
     box.setText(
-        "<h2>Lucas Chess NX</h2>"
-        "<p>A modern, local chess playing and training suite inspired by Lucas Chess "
-        "(lukasmonk) with a Battle Chess style 3D combat renderer.</p>"
+        f"<h2>{APP_NAME}</h2>"
+        f"<p><b>{APP_TAGLINE}</b> &mdash; version {APP_VERSION}</p>"
+        "<p>A local chess studio: play, train, analyse, or fight. Everything runs "
+        "on your own machine &mdash; no accounts, no servers, no telemetry.</p>"
         "<ul>"
-        "<li>Plays standard chess plus 10 variants (Chess960, Crazyhouse, Atomic, "
-        "King of the Hill, Three-check, Horde, Racing Kings, Antichess, Giveaway, Suicide)</li>"
-        "<li>Built-in engine with 12 Elo levels and 7 personalities, plus any UCI engine "
-        "(Stockfish)</li>"
-        "<li>Analysis with evaluation graph, MultiPV and blunder detection</li>"
-        "<li>Training modes built on the original Lucas Chess data sets</li>"
-        "<li>Battle Chess mode: procedural 3D fights with shattering pieces</li>"
+        f"<li><b>Play</b> standard chess and {variants} variants, against "
+        f"{levels} engine levels from {elo_lo} to {elo_hi} Elo with {styles} "
+        "personalities, or against any UCI engine you install (Stockfish "
+        "downloads on demand)</li>"
+        "<li><b>Train</b> on the real Lucas Chess data: tactics, STS, mates and "
+        "endgames, with a learning coach that tracks what you get wrong and "
+        "brings it back when it is due</li>"
+        "<li><b>Battle Chess</b> &mdash; capture a piece and a procedurally "
+        "generated 3D fight plays out. Turn it on or off at will; it is a "
+        "feature, not the identity</li>"
+        "<li><b>Anarchess</b>, the land-building board game for two to four "
+        "players, and <b>Anarchchess</b>, chess with the rules you choose</li>"
+        "<li>Analysis with an evaluation graph, MultiPV and blunder detection</li>"
         "</ul>"
-        "<p style='color:#9ca3af'>Content imported from the Lucas Chess project (GPLv2+). "
-        "Battle Chess visuals are procedurally generated.</p>")
+        "<p style='color:#9ca3af'>Tactics and training content come from the "
+        "Lucas Chess project (GPLv2+). Battle Chess visuals are procedural: no "
+        "third-party art and no sound samples.</p>")
     box.exec()
     return box
