@@ -42,6 +42,28 @@ the About box.
 - **The PWA manifest described 15,000 puzzles.** The library holds 112,198;
   the page description was right and only the manifest was understating it.
 
+### Changed
+
+- **The icon is redrawn.** The knight was built out of separate tiles with gaps
+  between them, which held together at 1024 px and came apart long before it
+  mattered: at 64 px the eye met a scatter of squares instead of a horse, and
+  at 16 px on a taskbar there was nothing left to read. The silhouette is now
+  filled as one piece of amber and the land tiles are laid *into* it in a
+  close second tone, flush, so the outline survives every size and the mosaic
+  only shows where there is room for it. Each size is drawn for itself rather
+  than shrunk from the master, because a mosaic that reads as detail at 1024
+  becomes stripes at 32. The knight also stands on a faint board along the
+  foot of the plate, so the mark says chess before it says anything else.
+- **The Android icon no longer gets cropped.** The maskable variant drew the
+  same rounded plate, so nearly half of it fell outside the safe circle and
+  the launcher cut the mark off. It is full bleed now, with a circular rim at
+  the safe edge and the knight pulled in to 33% - inside the zone every
+  launcher guarantees.
+- **The browser header drew its own imitation of the mark**: a 3x2 block of
+  tiles typed into `app.js`, in different colours, which had drifted away from
+  the icon entirely. It now uses the icon file, so the header, the taskbar,
+  the home screen and the window are the same picture by construction.
+
 ### Added
 
 - **The app carries the mark itself.** The toolbar showed only the name in

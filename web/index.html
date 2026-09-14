@@ -18,12 +18,10 @@
 
 <header class="topbar">
   <div class="brand">
-    <svg class="mark" viewBox="0 0 13 13" aria-hidden="true">
-      <rect width="13" height="13" rx="3.05" fill="#12151c"/>
-      <rect x="0.58" y="0.58" width="11.84" height="11.84" rx="2.6"
-            fill="none" stroke="#f0b429" stroke-opacity="0.85" stroke-width="0.18"/>
-      <g id="mark-tiles"></g>
-    </svg>
+    <!-- the real mark: the same file as the app icon, so the header cannot
+         drift away from what is on the taskbar or the home screen -->
+    <img class="mark" src="icons/talos-192.png" alt="" width="34" height="34"
+         decoding="async">
     <div class="brand-text">
       <strong>TALOS</strong>
       <span>The Living Chess Studio</span>

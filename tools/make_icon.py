@@ -47,10 +47,12 @@ NAVY_2 = (26, 30, 41, 255)
 PARCHMENT = (242, 237, 225, 255)
 WALNUT = (141, 106, 72, 255)
 AMBER = (240, 180, 41, 255)
+AMBER_LIGHT = (247, 199, 88, 255)
+AMBER_DEEP = (216, 155, 26, 255)
 SHADOW = (0, 0, 0, 120)
 
 SIZES = (1024, 512, 256, 192, 180, 128, 96, 64, 48, 32, 16)
-GRID = 13                 # tiles across the knight
+GRID = 11                 # tiles across the knight
 SUPERSAMPLE = 4
 
 
@@ -81,29 +83,60 @@ def knight_mask(size: int) -> Image.Image:
     return square.resize((size, size), Image.LANCZOS)
 
 
-def tile_grid(mask: Image.Image, size: int, cells: int = GRID) -> Image.Image:
-    """Fill the silhouette with square land tiles (the Anarchess motif)."""
+def knight_body(mask: Image.Image, size: int, cells: int = GRID) -> Image.Image:
+    """The knight as one solid piece, tiled from the inside.
+
+    The first version built the silhouette out of separate tiles with gaps
+    between them. That looked right at 1024 and fell apart by 64: the eye met
+    a scatter of squares instead of a knight, and at 16 there was nothing left
+    to read. So the silhouette is filled first - a single piece of amber - and
+    the land tiles are then laid *into* it in a close second tone, flush, so
+    the outline survives at every size and the mosaic only appears where there
+    is room for it.
+    """
     out = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(out)
-    step = size / cells
-    gap = step * 0.10
-    pixels = mask.load()
-    for row in range(cells):
-        for col in range(cells):
-            x0 = col * step
-            y0 = row * step
-            cx = min(size - 1, int(x0 + step / 2))
-            cy = min(size - 1, int(y0 + step / 2))
-            if pixels[cx, cy] < 128:
-                continue
-            # a light tile, a dark tile: the two colours of the land
-            colour = PARCHMENT if (row + col) % 2 == 0 else WALNUT
-            inset = gap
-            radius = step * 0.16
-            draw.rounded_rectangle(
-                [x0 + inset, y0 + inset, x0 + step - inset, y0 + step - inset],
-                radius=radius, fill=colour)
+    out.paste(AMBER, (0, 0), mask)
+    if size >= 96:                       # below this the tiles are noise
+        step = size / cells
+        draw = ImageDraw.Draw(out)
+        pixels = mask.load()
+        for row in range(cells):
+            for col in range(cells):
+                cx = min(size - 1, int(col * step + step / 2))
+                cy = min(size - 1, int(row * step + step / 2))
+                if pixels[cx, cy] < 128:
+                    continue
+                if (row + col) % 2 == 0:
+                    continue             # these keep the base amber
+                draw.rectangle([col * step, row * step,
+                                (col + 1) * step, (row + 1) * step],
+                               fill=AMBER_DEEP)
+    out.putalpha(mask)                   # the crisp edge comes back
     return out
+
+
+def board_strip(size: int, plate: Image.Image) -> Image.Image:
+    """A chessboard along the foot of the plate, for the knight to stand on.
+
+    Kept faint and clipped to the plate: it gives the mark its board without
+    competing with the silhouette at small sizes.
+    """
+    from PIL import ImageChops
+
+    strip = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(strip)
+    rows, cols = 2, 6
+    top = size * 0.80
+    row_h = (size - top) / rows
+    col_w = size / cols
+    for row in range(rows):
+        for col in range(cols):
+            light = (row + col) % 2 == 0
+            draw.rectangle([col * col_w, top + row * row_h,
+                            (col + 1) * col_w, top + (row + 1) * row_h],
+                           fill=(PARCHMENT if light else WALNUT)[:3] + (52,))
+    strip.putalpha(ImageChops.darker(strip.split()[-1], plate))
+    return strip
 
 
 def amber_glow(tiles: Image.Image, blur: float) -> Image.Image:
@@ -128,26 +161,42 @@ def compose(size: int, maskable: bool = False) -> Image.Image:
         colour = tuple(int(NAVY[i] + (NAVY_2[i] - NAVY[i]) * t) for i in range(3))
         plate_draw.line([(0, y), (size, y)], fill=colour + (255,))
     mask = Image.new("L", (size, size), 0)
-    ImageDraw.Draw(mask).rounded_rectangle(
-        [0, 0, size - 1, size - 1], radius=int(size * 0.235), fill=255)
+    if maskable:
+        # Full bleed. A launcher crops this to a circle, a squircle or a
+        # teardrop, so the plate has to reach every corner or the mark ends up
+        # floating on the launcher's own background.
+        ImageDraw.Draw(mask).rectangle(
+            [0, 0, size - 1, size - 1], fill=255)
+    else:
+        ImageDraw.Draw(mask).rounded_rectangle(
+            [0, 0, size - 1, size - 1], radius=int(size * 0.235), fill=255)
     canvas.paste(plate, (0, 0), mask)
 
     # a thin amber rim, inset
     rim = ImageDraw.Draw(canvas)
-    rim.rounded_rectangle([size * 0.045, size * 0.045,
-                           size * 0.955, size * 0.955],
-                          radius=int(size * 0.20),
-                          outline=AMBER[:3] + (int(150 if maskable else 210),),
-                          width=max(1, int(size * 0.014)))
+    if maskable:
+        # a circle at the safe-zone edge: whatever shape the launcher cuts,
+        # this ring survives it
+        rim.ellipse([size * 0.085, size * 0.085, size * 0.915, size * 0.915],
+                    outline=AMBER[:3] + (150,),
+                    width=max(1, int(size * 0.016)))
+    else:
+        rim.rounded_rectangle([size * 0.045, size * 0.045,
+                               size * 0.955, size * 0.955],
+                              radius=int(size * 0.20),
+                              outline=AMBER[:3] + (210,),
+                              width=max(1, int(size * 0.014)))
 
     # the knight, made of tiles.  The glyph is taller than it is wide, so the
     # mark is trimmed to its own bounds and normalised: the longest side is a
     # fixed fraction of the plate and the margins come out even.
+    canvas.alpha_composite(board_strip(size, mask))
+
     knight = int(inner * 0.92)
     mask_img = knight_mask(knight)
-    tiles = tile_grid(mask_img, knight)
+    tiles = knight_body(mask_img, knight)
     tiles = tiles.crop(tiles.getbbox())
-    scale = (inner * (0.86 if maskable else 0.72)) / max(tiles.size)
+    scale = (inner * (0.74 if maskable else 0.72)) / max(tiles.size)
     tiles = tiles.resize((max(1, int(tiles.width * scale)),
                           max(1, int(tiles.height * scale))), Image.LANCZOS)
     blur = max(1.0, tiles.width * 0.035)
@@ -168,19 +217,20 @@ def compose(size: int, maskable: bool = False) -> Image.Image:
 
 
 def write_svg(path: str) -> None:
-    """The same mark as vectors: a 13x13 tile grid cut to the knight."""
+    """The same mark as vectors: a tile grid cut to the knight."""
     mask = knight_mask(GRID)
     pixels = mask.load()
     rects = []
     for row in range(GRID):
         for col in range(GRID):
             if pixels[col, row] >= 128:
-                fill = "#f2ede1" if (row + col) % 2 == 0 else "#8d6a48"
+                # flush, so the vector silhouette is whole like the raster one
+                fill = "#f7c758" if (row + col) % 2 == 0 else "#cd8f14"
                 rects.append(
-                    f'<rect x="{col + 0.10:.2f}" y="{row + 0.10:.2f}" '
-                    f'width="0.80" height="0.80" rx="0.13" fill="{fill}"/>')
+                    f'<rect x="{col:.2f}" y="{row:.2f}" '
+                    f'width="1.00" height="1.00" rx="0.09" fill="{fill}"/>')
     body = "\n    ".join(rects)
-    svg = f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 13 13"
+    svg = f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 11 11"
      width="512" height="512" role="img" aria-label="TALOS">
   <title>TALOS - The Living Chess Studio</title>
   <defs>
@@ -189,9 +239,23 @@ def write_svg(path: str) -> None:
       <stop offset="1" stop-color="#1a1e29"/>
     </linearGradient>
   </defs>
-  <rect width="13" height="13" rx="3.05" fill="url(#plate)"/>
-  <rect x="0.58" y="0.58" width="11.84" height="11.84" rx="2.6"
-        fill="none" stroke="#f0b429" stroke-opacity="0.82" stroke-width="0.18"/>
+  <rect width="11" height="11" rx="2.58" fill="url(#plate)"/>
+  <g opacity="0.20">
+    <rect x="0" y="8.8" width="1.83" height="1.10" fill="#f2ede1"/>
+    <rect x="1.83" y="8.8" width="1.83" height="1.10" fill="#8d6a48"/>
+    <rect x="3.67" y="8.8" width="1.83" height="1.10" fill="#f2ede1"/>
+    <rect x="5.50" y="8.8" width="1.83" height="1.10" fill="#8d6a48"/>
+    <rect x="7.33" y="8.8" width="1.83" height="1.10" fill="#f2ede1"/>
+    <rect x="9.17" y="8.8" width="1.83" height="1.10" fill="#8d6a48"/>
+    <rect x="0" y="9.90" width="1.83" height="1.10" fill="#8d6a48"/>
+    <rect x="1.83" y="9.90" width="1.83" height="1.10" fill="#f2ede1"/>
+    <rect x="3.67" y="9.90" width="1.83" height="1.10" fill="#8d6a48"/>
+    <rect x="5.50" y="9.90" width="1.83" height="1.10" fill="#f2ede1"/>
+    <rect x="7.33" y="9.90" width="1.83" height="1.10" fill="#8d6a48"/>
+    <rect x="9.17" y="9.90" width="1.83" height="1.10" fill="#f2ede1"/>
+  </g>
+  <rect x="0.50" y="0.50" width="10.00" height="10.00" rx="2.20"
+        fill="none" stroke="#f0b429" stroke-opacity="0.82" stroke-width="0.16"/>
   <g>
     {body}
   </g>
@@ -207,34 +271,43 @@ def main() -> int:
 
     master = compose(1024)
     master.save(os.path.join(OUT, "talos-1024.png"))
+
+    # Every size is drawn for itself rather than shrunk from the master. A
+    # mosaic that reads as detail at 1024 turns into stripes at 32, and an
+    # icon has to survive being 16 pixels wide on a taskbar.
     for size in SIZES:
         if size == 1024:
             continue
-        master.resize((size, size), Image.LANCZOS).save(
-            os.path.join(OUT, f"talos-{size}.png"))
+        compose(size).save(os.path.join(OUT, f"talos-{size}.png"))
 
     for size in (512, 192):
         compose(size, maskable=True).save(
             os.path.join(OUT, f"talos-maskable-{size}.png"))
 
-    master.resize((180, 180), Image.LANCZOS).save(
-        os.path.join(OUT, "apple-touch-icon.png"))
+    compose(180).save(os.path.join(OUT, "apple-touch-icon.png"))
 
     ico_sizes = [(16, 16), (24, 24), (32, 32), (48, 48), (64, 64),
                  (128, 128), (256, 256)]
-    master.save(os.path.join(OUT, "favicon.ico"), sizes=ico_sizes)
+    try:
+        master.save(os.path.join(OUT, "favicon.ico"), sizes=ico_sizes,
+                    append_images=[compose(w) for w in (16, 24, 32, 48, 64, 128)])
+    except Exception:                                     # pragma: no cover
+        master.save(os.path.join(OUT, "favicon.ico"), sizes=ico_sizes)
 
     # a bare 512 png is what the Linux .desktop file points at
-    master.resize((512, 512), Image.LANCZOS).save(
-        os.path.join(OUT, "talos.png"))
+    compose(512).save(os.path.join(OUT, "talos.png"))
 
     # macOS: PyInstaller refuses an .ico here and wants a real .icns
+    icns_sizes = [(16, 16), (32, 32), (64, 64), (128, 128), (256, 256),
+                  (512, 512), (1024, 1024)]
     try:
-        master.save(os.path.join(OUT, "talos.icns"),
-                    sizes=[(16, 16), (32, 32), (64, 64), (128, 128),
-                           (256, 256), (512, 512), (1024, 1024)])
-    except Exception as exc:                              # pragma: no cover
-        print("  could not write talos.icns: " + str(exc), file=sys.stderr)
+        master.save(os.path.join(OUT, "talos.icns"), sizes=icns_sizes,
+                    append_images=[compose(w) for w in (16, 32, 64, 128, 256, 512)])
+    except Exception:                                     # pragma: no cover
+        try:
+            master.save(os.path.join(OUT, "talos.icns"), sizes=icns_sizes)
+        except Exception as exc:
+            print("  could not write talos.icns: " + str(exc), file=sys.stderr)
 
     # sanity: the mark must actually cover a sensible part of the plate
     alpha = master.split()[-1]

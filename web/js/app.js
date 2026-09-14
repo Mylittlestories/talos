@@ -53,7 +53,6 @@ class App {
   }
 
   async boot() {
-    markHeader();
     this._tabs();
     this.engine.onstate = (engine) => {
       const pct = Math.round((engine.progress || 0) * 100);
@@ -207,27 +206,6 @@ function loadSettings() {
   } catch (err) {
     return {};
   }
-}
-
-/** Draw the tile block of the app mark so the header matches the icon. */
-function markHeader() {
-  const group = document.getElementById("mark-tiles");
-  if (!group) return;
-  const size = 1.7;
-  const gap = 0.16;
-  const x0 = (13 - (size * 3 + gap * 2)) / 2;
-  const y0 = 7.0;
-  let out = "";
-  for (let row = 0; row < 2; row += 1) {
-    for (let col = 0; col < 3; col += 1) {
-      const light = (row + col) % 2 === 0;
-      out += '<rect x="' + (x0 + col * (size + gap)).toFixed(2) +
-        '" y="' + (y0 + row * (size + gap)).toFixed(2) +
-        '" width="' + size + '" height="' + size + '" rx="0.22" fill="' +
-        (light ? "#eee3cc" : "#8d6a48") + '"/>';
-    }
-  }
-  group.innerHTML = out;
 }
 
 const app = new App();
