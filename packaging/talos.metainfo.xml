@@ -8,15 +8,15 @@
   <description>
     <p>
       TALOS is a completely local chess playing, training and analysis suite
-      inspired by Lucas Chess. It plays standard chess plus ten FICS variants
-      and two TALOS originals, trains you on 112,198 real Lucas Chess puzzles,
+      inspired by Lucas Chess. It plays standard chess plus twelve variants,
+      including two TALOS originals, trains you on 112,198 real Lucas Chess puzzles,
       keeps a spaced-repetition coach, and can swap the flat board for a 3D
       Battle Chess stage where the victims lose their heads.
     </p>
     <p>
-      It also ships Anarchess, a reconstruction of the tile-laying game by
-      Dimitris Grammenos, and Anarchchess, the community's house rules as a
-      real playable variant.
+      It also ships an implementation of Anarchess by Dimitris Grammenos,
+      including its SOLO and Anarcheckers variants, and Anarchchess, the
+      community's house rules as a real playable variant.
     </p>
   </description>
   <launchable type="desktop-id">talos.desktop</launchable>
@@ -34,7 +34,7 @@
       <image>https://raw.githubusercontent.com/Mylittlestories/talos/main/docs/img/08-anarchess.png</image>
     </screenshot>
     <screenshot>
-      <caption>Crazyhouse, one of the ten variants the engine also plays</caption>
+      <caption>Crazyhouse, one of the twelve variants the engine also plays</caption>
       <image>https://raw.githubusercontent.com/Mylittlestories/talos/main/docs/img/06-crazyhouse.png</image>
     </screenshot>
     <screenshot>

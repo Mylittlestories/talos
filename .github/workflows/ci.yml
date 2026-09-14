@@ -42,8 +42,13 @@ jobs:
             libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 libxcb-xkb1 \
             libgl1 libegl1 libglib2.0-0
 
-      - name: Self test (100 checks, headless)
+      - name: Self test (headless)
         run: python tools/selftest.py
+        env:
+          QT_QPA_PLATFORM: offscreen
+
+      - name: Application smoke (headless)
+        run: python tools/app_smoke.py
         env:
           QT_QPA_PLATFORM: offscreen
 

@@ -2,7 +2,7 @@
 """
 Pull the release notes for one version out of CHANGELOG.md.
 
-    python tools/release_notes.py 2.0.0 > notes.md
+    python tools/release_notes.py <version> > notes.md
 
 The release workflow uses this so the tag, the changelog and the GitHub
 Release can never drift apart. Falls back to the first `## [x.y.z]` section

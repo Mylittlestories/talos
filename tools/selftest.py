@@ -592,6 +592,11 @@ def test_anarchess() -> None:
     probe.tiles = {(0, 0): LIGHT, (2, 0): DARK}
     check("R2: two or more neighbours may be any colour",
           probe._placement_ok((1, 0), LIGHT))
+    # The model must reject R1 violations too, not only omit them from hints.
+    probe.tiles = {(0, 0): LIGHT, (0, 1): DARK}
+    probe.drawn = LIGHT
+    check("R1: an invalid tile action is rejected",
+          not probe.apply(AnarchessAction("tile", cell=(1, 0), colour=LIGHT)))
 
     # attacks are diagonal, and need no friendly support
     probe = AnarchessGame(2, seed=1)
@@ -671,7 +676,14 @@ def test_anarchess() -> None:
     check("every tile is laid", game.tiles_left() == 0,
           f"{game.total_tiles()} tiles")
 
-    # the one-player game forces the pawn action
+    # SOLO is always the two original tribes, even if an old caller supplied
+    # a multi-player table size, and it forces the pawn action.
+    malformed_solo = AnarchessGame(4, AnarchessRules(solo=True), seed=11,
+                                    names=["Only one name"])
+    check("SOLO always has two tribes",
+          malformed_solo.players == 2 and len(malformed_solo.reserve) == 2)
+    check("short player names are completed",
+          len(malformed_solo.names) == 2 and all(malformed_solo.names))
     solo = AnarchessGame(2, AnarchessRules(solo=True, tiles_per_colour=16),
                          seed=11)
     forced = True
@@ -688,6 +700,17 @@ def test_anarchess() -> None:
         solo.apply(solo.rng.choice(acts))
     check("the solo game forces the pawn action", forced,
           f"solo total {solo.solo_score()}")
+    stranded_solo = AnarchessGame(2, AnarchessRules(solo=True), seed=12)
+    stranded_solo.tiles = {(0, 0): LIGHT}
+    stranded_solo.pawns = {}
+    stranded_solo.reserve = [0, 0]
+    stranded_solo.current = 0
+    stranded_solo.placed_tile = True
+    stranded_solo.last_tile = (0, 0)
+    check("a stranded solo turn offers and accepts a pass",
+          [a.kind for a in stranded_solo.legal_actions()] == ["pass"]
+          and stranded_solo.apply(AnarchessAction("pass"))
+          and not stranded_solo.placed_tile)
 
     # Anarcheckers jumps instead of stepping
     checkers = AnarchessGame(2, AnarchessRules(checkers=True,
@@ -702,6 +725,9 @@ def test_anarchess() -> None:
           any(a.kind == "attack" and a.cell == (2, 2) and a.source == (0, 0)
               for a in acts) and not any(a.kind == "move" for a in acts),
           "the jump is compulsory")
+    check("Anarcheckers cannot pass a compulsory jump",
+          not any(a.kind == "pass" for a in checkers.legal_actions())
+          and not checkers.apply(AnarchessAction("pass")))
 
     check("every ruling is documented", len(RULINGS) >= 8,
           f"{len(RULINGS)} rulings recorded")

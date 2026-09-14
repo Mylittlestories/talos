@@ -54,6 +54,7 @@ export class AnarchessView {
     for (const key of ["mode", "tiles"]) {
       this.el[key].addEventListener("change", () => {
         this.app.set(key === "mode" ? "anMode" : "anTiles", this.el[key].value);
+        if (key === "mode") this._syncMode();
         this.newGame();
       });
     }
@@ -61,6 +62,7 @@ export class AnarchessView {
     this.el.level.value = String(this.app.settings.anLevel || 2);
     this.el.mode.value = String(this.app.settings.anMode || "standard");
     this.el.tiles.value = String(this.app.settings.anTiles || 32);
+    this._syncMode();
   }
 
   /** The die decides the tile colour, so all the client sets is the
@@ -70,10 +72,29 @@ export class AnarchessView {
              tiles_per_colour: Number(this.el.tiles.value) };
   }
 
+  _solo() {
+    return this.el.mode.value === "solo";
+  }
+
+  _syncMode() {
+    const solo = this._solo();
+    // SOLO is one person playing two tribes. Keep the normal table size in
+    // saved settings, but show and submit the only valid two-tribe setup.
+    this.el.players.disabled = solo;
+    this.el.level.disabled = solo;
+    this.el.players.value = String(solo ? 2 : (this.app.settings.anPlayers || 2));
+  }
+
+  _pawnPlayer() {
+    return Number.isInteger(this.state && this.state.pawn_player)
+      ? this.state.pawn_player : this.state.current;
+  }
+
   async newGame() {
     if (this.busy) return;
+    this._syncMode();
     this.source = null;
-    const players = Number(this.el.players.value);
+    const players = this._solo() ? 2 : Number(this.el.players.value);
     const seed = Math.floor(Math.random() * 1e9);
     this.state = await this.app.engine.json(
       "anarchess_new", [players, JSON.stringify(this.rules()), seed]);
@@ -102,7 +123,6 @@ export class AnarchessView {
   async pass() {
     if (this.busy || !this.state || this.state.finished) return;
     if (!this.phase() || !this.legal.can_pass) return;
-    if (this.state.rules && this.state.rules.solo) return;   // forced in solo
     await this.apply({ kind: "pass" });
     await this.runBots();
   }
@@ -151,7 +171,8 @@ export class AnarchessView {
       await this.runBots();
       return;
     }
-    const mine = this.state.pawns.find((p) => p[0] === cx && p[1] === cy && p[2] === 0);
+    const mine = this.state.pawns.find((p) => p[0] === cx && p[1] === cy
+      && p[2] === this._pawnPlayer());
     if (mine && pawns.some((a) => a.fx === cx && a.fy === cy)) {
       this.source = [cx, cy];
       this.draw();
@@ -328,7 +349,9 @@ export class AnarchessView {
     }
 
     // where a tile may go: one ghost, in the colour the die named
-    if (this.state.current === 0 && !this.state.finished) {
+    const humanTurn = this.state.current === 0
+      || !!(this.state.rules && this.state.rules.solo);
+    if (humanTurn && !this.state.finished) {
       for (const t of this.legal.tiles || []) {
         const x0 = px(t.x) + pad;
         const y0 = py(t.y) + pad;
@@ -403,12 +426,15 @@ export class AnarchessView {
     if (!s) return;
     this.el.status.textContent = s.status;
     const solo = !!(s.rules && s.rules.solo);
-    this.el.pass.disabled = solo || s.finished;
+    const canPass = !!(this.legal && this.legal.can_pass);
+    this.el.pass.disabled = s.finished || !canPass;
+    this.el.pass.textContent = solo && canPass
+      ? "Pass (no pawn action)" : "Skip pawn action";
     this.el.hint.textContent = s.finished
       ? (solo ? "Solo: " + s.solo_score + " of " + s.target + " points" : "Game over")
       : s.current === 0 || solo
         ? (this.phase()
-            ? (solo ? "Pawn action (forced)" : "Pawn action (optional)")
+            ? (solo ? "Pawn action (required when possible)" : "Pawn action (optional)")
             : "Lay a " + (s.drawn ? "light" : "dark") + " tile")
         : s.names[s.current] + " is thinking…";
     const rows = s.names.map((name, i) => {

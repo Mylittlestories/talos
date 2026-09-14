@@ -207,12 +207,14 @@
       <div id="rule-list" class="rules"></div>
 
       <h2>Anarchess</h2>
-      <p>A reconstruction of the game by Dimitris Grammenos (FORTH). Two to
-        four players share 32 light and 32 dark tiles and grow a landscape;
-        the player with the most pawns in an area of two or more tiles scores
-        it. The published sources describe the components and the scoring but
-        leave several mechanics open, so this build documents each decision
-        rather than guessing quietly.</p>
+      <p>An implementation of the published game by Dimitris Grammenos
+        (FORTH). The die chooses the tile colour; the player of the opposite
+        colour opens, then every turn lays a tile and may use one pawn action.
+        In SOLO the prescribed pawn action is required when one is available.
+        Areas of two or more same-coloured tiles score for whoever holds the
+        most pawns. Choose the standard table, the one-player 192-point
+        <em>SOLO</em> challenge, or jump-and-chain-capture
+        <em>Anarcheckers</em> in the Anarchess tab.</p>
       <div class="presets">
         <button id="an-open">Open Anarchess</button>
       </div>

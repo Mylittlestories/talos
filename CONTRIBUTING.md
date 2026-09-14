@@ -93,7 +93,7 @@ automatically rather than shipped blank.
 
 1. Move `[Unreleased]` into a version section in `CHANGELOG.md`.
 2. Bump `APP_VERSION` in `lc/__init__.py`.
-3. `git tag -a v2.0.0 -m "TALOS 2.0.0" && git push --tags`.
+3. `git tag -a vX.Y.Z -m "TALOS X.Y.Z" && git push origin vX.Y.Z`.
 4. CI builds the Windows, Linux, macOS and browser bundles, deploys the Pages
    site and opens a **draft** release with the changelog section as its body
    and `SHA256SUMS.txt` attached.

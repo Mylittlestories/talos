@@ -126,20 +126,90 @@ def main() -> int:
         check(f"{mode} selected in the dialog",
               (rules.solo, rules.checkers) == flags,
               f"solo={rules.solo} checkers={rules.checkers}")
-    dialog = AnarchessDialog(players=2)
+    dialog = AnarchessDialog(players=4)
     dialog.mode.setCurrentIndex(dialog.mode.findData("solo"))
     app.processEvents()
+    solo_cfg = dialog.config()
     check("solo locks every seat to the one human",
-          not dialog.level.isEnabled()
+          not dialog.players.isEnabled() and not dialog.level.isEnabled()
           and all(c.currentData() == "human" for c in dialog.seat_combos),
           f"{len(dialog.seat_combos)} seats, opponents box off")
+    check("solo is always a two-tribe game",
+          solo_cfg["players"] == 2 and solo_cfg["seats"] == ["human", "human"],
+          f"{solo_cfg['players']} tribes")
     dialog.mode.setCurrentIndex(dialog.mode.findData("standard"))
     app.processEvents()
     check("leaving solo hands a seat back to the bot",
-          dialog.level.isEnabled()
+          dialog.players.isEnabled() and dialog.level.isEnabled()
           and any(c.currentData() == "bot" for c in dialog.seat_combos))
     check("the reserve penalty is a dial",
           dialog.config()["rules"].reserve_penalty == 6)
+
+    # The actual canvas view must give one person the turns and the pawns of
+    # both alternating tribes in SOLO; rule-only tests cannot catch this.
+    section("solo controls")
+    solo_view = AnarchessView()
+    solo_view.start({"players": 4, "seats": ["human"] * 4,
+                     "rules": AnarchessRules(solo=True), "seed": 2})
+    solo_game = solo_view.game
+    check("the solo view normalises a four-player request",
+          solo_game.players == 2 and solo_view._my_turn(),
+          f"{solo_game.players} tribes, turn {solo_game.current + 1}")
+    # Make the acting tribe Dark while the turn owner is Light. The view must
+    # still let the one solo player select that Dark pawn.
+    from lc.anarchess.rules import DARK, LIGHT
+    solo_game.tiles = {(0, 0): LIGHT, (1, 0): DARK}
+    solo_game.pawns = {(0, 0): 1}
+    solo_game.current = 0
+    solo_game.placed_tile = True
+    solo_game.last_tile = (0, 0)
+    solo_view._refresh()
+    solo_view._on_cell(0, 0)
+    check("the solo player controls the other tribe's pawn",
+          solo_view.selected_pawn == (0, 0),
+          f"actor {solo_game.acting_pawn_player() + 1}")
+    # With no pawn of either tribe available to move, SOLO must expose its
+    # model's legal pass rather than trapping the player in phase two.
+    solo_game.tiles = {(0, 0): LIGHT}
+    solo_game.pawns = {}
+    solo_game.reserve = [0, 0]
+    solo_game.current = 0
+    solo_game.drawn = LIGHT
+    solo_game.placed_tile = True
+    solo_game.last_tile = (0, 0)
+    solo_view.selected_pawn = None
+    solo_view._refresh()
+    pass_was_enabled = solo_view.skip_button.isEnabled()
+    before_current = solo_game.current
+    solo_view._skip()
+    check("a stranded solo player can pass the pawn phase",
+          pass_was_enabled and not solo_game.placed_tile
+          and solo_game.current == (before_current + 1) % solo_game.players)
+
+    section("shared-table controls")
+    shared_view = AnarchessView()
+    shared_view.start({"players": 2, "seats": ["human", "human"],
+                       "rules": AnarchessRules(), "seed": 3})
+    shared_view.game.current = 0
+    first_human_turn = shared_view._my_turn()
+    shared_view.game.current = 1
+    second_human_turn = shared_view._my_turn()
+    check("each local human can take their tribe's turn",
+          first_human_turn and second_human_turn)
+    # A light tile touching exactly one light neighbour violates R1. It must
+    # neither be hinted nor be sent as a placement when clicked.
+    shared_game = shared_view.game
+    shared_game.tiles = {(0, 0): LIGHT, (0, 1): DARK}
+    shared_game.pawns = {}
+    shared_game.supply = {LIGHT: 4, DARK: 4}
+    shared_game.current = 0
+    shared_game.drawn = LIGHT
+    shared_game.placed_tile = False
+    shared_view._refresh()
+    shared_view._on_cell(1, 0)
+    check("the desktop only offers legal R1 tile placements",
+          (1, 0) not in shared_view.board.canvas.legal_cells
+          and not shared_game.placed_tile)
 
     # ------------------------------------------------------------------
     section("battle chess")

@@ -61,9 +61,10 @@ Scoring
 
 Variants
     :attr:`AnarchessRules.solo` is the published one-player puzzle: the pawn
-    action is not optional and not chosen - it follows a fixed priority
-    (settle, else attack, else move) with the pawn colour forced to be the
-    opposite of the tile just laid.  The target is 192 points.
+    action is not optional or chosen when one is available: it follows a
+    fixed priority (settle, else attack, else move) with the pawn colour
+    forced to be the opposite of the tile just laid. If none is available,
+    passing ends the turn. The target is 192 points.
 
     :attr:`AnarchessRules.checkers` is Anarcheckers, also from the
     rulebook: pieces move diagonally instead of orthogonally, captures are
@@ -214,10 +215,15 @@ class AnarchessGame:
 
     def __init__(self, players: int = 2, rules: Optional[AnarchessRules] = None,
                  seed: Optional[int] = None, names: Optional[Sequence[str]] = None):
-        self.players = max(2, min(4, players))
         self.rules = rules or AnarchessRules()
+        # SOLO is one person playing the two original tribes.  Keeping this
+        # invariant in the model prevents a stale UI or saved browser state
+        # from quietly creating third and fourth reserves that SOLO never has.
+        self.players = 2 if self.rules.solo else max(2, min(4, players))
         self.rng = random.Random(seed)
-        self.names: List[str] = list(names or PLAYER_NAMES[:self.players])
+        default_names = PLAYER_NAMES[:self.players]
+        supplied_names = list(names or default_names)
+        self.names: List[str] = (supplied_names + default_names[len(supplied_names):])[:self.players]
 
         self.tiles: Dict[Cell, bool] = {}          # cell -> LIGHT / DARK
         self.pawns: Dict[Cell, int] = {}           # cell -> player index
@@ -445,13 +451,15 @@ class AnarchessGame:
         if not self.placed_tile:
             return self.legal_tile_actions()
         acts = self.legal_pawn_actions()
-        if not self.rules.solo or not acts:
-            # The pawn action is optional in the multiplayer game, so doing
-            # nothing is always on the menu: without it a player whose pawns
-            # are boxed in would have no legal action and the game would stop
-            # dead.  SOLO forces the action - but only when one exists.  A
-            # solo player who can neither settle, attack nor move must still
-            # be able to end the turn, or the game deadlocks.
+        forced_capture = (self.rules.checkers
+                          and any(a.kind == "attack" for a in acts))
+        if (self.rules.solo and not acts) or (not self.rules.solo
+                                              and not forced_capture):
+            # The pawn action is optional in a normal multiplayer turn, so
+            # doing nothing is normally on the menu. A compulsory checkers
+            # jump is the exception. SOLO forces its prescribed action - but
+            # only when one exists: a player who can neither settle, attack
+            # nor move must still be able to end the turn instead of deadlocking.
             acts.append(AnarchessAction("pass"))
         return acts
 
@@ -459,15 +467,14 @@ class AnarchessGame:
     def apply(self, action: AnarchessAction) -> bool:
         if self.finished:
             return False
-        me = self.current
-
         if action.kind == "tile":
             if self.placed_tile or action.cell is None:
                 return False
-            if action.cell in self.tiles or action.cell not in set(self.tile_cells()):
-                return False
             colour = action.colour
-            if colour is None or self.supply[colour] <= 0:
+            if colour is None:
+                return False
+            if not any(a.cell == action.cell and a.colour == colour
+                       for a in self.legal_tile_actions()):
                 return False
             self.tiles[action.cell] = colour
             self.supply[colour] -= 1
@@ -483,7 +490,11 @@ class AnarchessGame:
         acting = self.acting_pawn_player()
 
         if action.kind == "pass":
-            if self.rules.solo:
+            # A pass is legal only when legal_actions offers one. This keeps
+            # SOLO's no-action escape hatch while preserving compulsory SOLO
+            # actions and Anarcheckers' compulsory captures at the model
+            # boundary, not merely in the interface.
+            if not any(a.kind == "pass" for a in self.legal_actions()):
                 return False
             self.used_pawn_action = True
             self.last_action = action

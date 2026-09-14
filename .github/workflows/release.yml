@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Tag to build (e.g. v2.0.0)
+        description: Existing tag to build (e.g. v2.1.1)
         required: true
 
 permissions:
@@ -18,6 +18,9 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # A manual run must build the requested existing tag, not main.
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.tag) || github.ref }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -44,6 +47,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # A manual run must build the requested existing tag, not main.
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.tag) || github.ref }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -80,6 +86,9 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # A manual run must build the requested existing tag, not main.
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.tag) || github.ref }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -104,6 +113,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # A manual run must build the requested existing tag, not main.
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.tag) || github.ref }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -114,8 +126,21 @@ jobs:
           python -m pip install chess
           python tools/build_web.py
 
+      - name: Determine release version
+        id: version
+        shell: bash
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            version="${INPUT_TAG#v}"
+          else
+            version="${GITHUB_REF_NAME#v}"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
       - name: Zip it for self-hosting
-        run: cd web && zip -qr "../talos-browser-${GITHUB_REF_NAME#v}.zip" . && cd ..
+        run: cd web && zip -qr "../talos-browser-${{ steps.version.outputs.version }}.zip" . && cd ..
 
       - uses: actions/upload-artifact@v4
         with:
@@ -128,6 +153,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # A manual run must build the requested existing tag, not main.
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.tag) || github.ref }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -139,12 +167,16 @@ jobs:
 
       - name: Which version is this
         id: ver
+        shell: bash
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
         run: |
-          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
-            echo "tag=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            tag="${INPUT_TAG#v}"
           else
-            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+            tag="${GITHUB_REF_NAME#v}"
           fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
       - name: Notes for this version
         run: |
@@ -161,7 +193,8 @@ jobs:
       - name: Create the release
         uses: softprops/action-gh-release@v2
         with:
-          name: TALOS ${{ github.ref_name }}
+          tag_name: v${{ steps.ver.outputs.tag }}
+          name: TALOS ${{ steps.ver.outputs.tag }}
           body_path: notes.md
           draft: true
           # artifacts/* already contains SHA256SUMS.txt - listing it a second

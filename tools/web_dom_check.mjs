@@ -215,6 +215,58 @@ check(an.state.tiles.length >= before + 2, "the bots answer",
 check(an.state.current === 0, "the turn comes back round");
 check($("an-players-list").textContent.includes("Light"), "the tribe panel is filled");
 
+console.log("\nanarchess solo");
+$("an-players").value = "4";
+$("an-mode").value = "solo";
+await an.newGame();
+check(an.state.rules.solo && an.state.players === 2,
+  "SOLO normalises to two tribes", an.state.players + " tribes");
+check($("an-players").disabled && $("an-level").disabled,
+  "SOLO disables table-only controls");
+const soloBefore = an.state.tiles.length;
+const soloSpot = (an.legal.tiles || [])[0];
+check(!!soloSpot, "the solo player has a tile to lay");
+await clickCell(soloSpot.x, soloSpot.y);
+check(an.state.tiles.length === soloBefore + 1 && an.state.placed,
+  "the solo player can act on either turn", an.state.tiles.length + " tiles");
+check(Number.isInteger(an.state.pawn_player),
+  "the pawn-action tribe is carried in the snapshot", String(an.state.pawn_player));
+// The turn owner can be Light while the SOLO pawn actor is Dark. Make that
+// state explicit and verify the controller selects the Dark pawn, not a
+// hard-coded Light one; applying the second click is outside this UI check.
+const savedSoloState = an.state;
+const savedSoloLegal = an.legal;
+an.state = { current: 0, pawn_player: 1, rules: { solo: true },
+  pawns: [[3, 3, 1]], tiles: [], areas: [], finished: false };
+an.legal = { tiles: [], pawns: [{ kind: "move", x: 4, y: 3, fx: 3, fy: 3 }], can_pass: false };
+an.source = null;
+an.ox = 0;
+an.oy = 0;
+an.cell = 1;
+await an._click({ clientX: 3.5, clientY: 3.5 });
+check(Array.isArray(an.source) && an.source[0] === 3 && an.source[1] === 3,
+  "the solo player can select the other tribe's pawn");
+an.state = savedSoloState;
+an.legal = savedSoloLegal;
+an.source = null;
+
+const savedApply = an.apply;
+let passedSoloAction = null;
+an.state = { current: 0, rules: { solo: true }, names: ["Light", "Dark"],
+  pawns: [], reserve: [0, 0], scores: [0, 0], final: null,
+  supply: { light: 0, dark: 0 }, left: 0, status: "No pawn action", finished: false };
+an.legal = { tiles: [], pawns: [], can_pass: true };
+an._panel();
+an.apply = async (action) => { passedSoloAction = action; return true; };
+await an.pass();
+check(!$("btn-anpass").disabled && $("btn-anpass").textContent.includes("Pass")
+  && passedSoloAction && passedSoloAction.kind === "pass",
+"a stranded solo player is offered a pass");
+an.apply = savedApply;
+an.state = savedSoloState;
+an.legal = savedSoloLegal;
+an.source = null;
+
 console.log("\nrules");
 await app.show("rules");
 $("preset-anarchy").dispatchEvent(new win.Event("click", { bubbles: true }));

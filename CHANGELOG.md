@@ -16,6 +16,42 @@ Nothing yet.
 
 ---
 
+## [2.1.1] — SOLO, on every board
+
+### Fixed
+
+- **Anarchess SOLO is now genuinely one player playing both tribes.** The
+  desktop view previously handed the second turn to a non-existent opponent,
+  and the browser only let the player select Light pawns. SOLO is normalised to
+  its two original tribes at the model, dialog, desktop-view and browser-bridge
+  boundaries; both boards now expose the correct pawn action on every turn
+  and offer a pass only when no prescribed action exists. The model now enforces
+  that exception itself and no longer permits a pass around Anarcheckers'
+  compulsory jumps. Old browser snapshots with extra SOLO reserves are safely
+  normalised too.
+- **Local Anarchess tables now honour their controls.** Every seat configured
+  as Human can take that tribe's turn; desktop placement hints use the same R1
+  legality check as the game model; and a direct action can no longer bypass it.
+- **Returning browser players receive this release.** The service worker cache
+  name had stopped at 2.0.3, so a 2.1.0 deployment could retain stale shell
+  files. It now advances with 2.1.1.
+- **The public description now matches the implementation.** The README,
+  browser Rules tab, AppStream metadata and application credit say that
+  Anarchess follows the published rulebooks rather than calling it an open
+  reconstruction. The browser build instructions now invoke its Node test
+  correctly.
+- **Manual release runs now build the requested tag.** Every release job checks
+  out the selected tag, the browser archive gets its selected version in the
+  filename, and the resulting draft release uses that same version rather than
+  the workflow's branch name.
+
+### Changed
+
+- CI now runs the headless application smoke test as well as the rule-level
+  self test; the browser and desktop SOLO paths have focused regression checks.
+
+---
+
 ## [2.1.0] — The land before Chess, and thirty ways to die
 
 Anarchess stopped being a reconstruction, and Battle Chess learned to walk.

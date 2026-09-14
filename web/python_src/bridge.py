@@ -19,14 +19,13 @@ from __future__ import annotations
 
 import json
 import sys
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 import chess
 
 from lc.anarchess.ai import AnarchessBot
 from lc.anarchess.rules import (SOLO_PERFECT_SCORE, AnarchessAction,
-                            AnarchessGame, AnarchessRules,
-                               LIGHT)
+                            AnarchessGame, AnarchessRules)
 from lc.core.engine import DEFAULT_LEVELS, LCEngine, Level, level_by_name
 from lc.variants.anarchchess import AnarchBoard, AnarchRules, RULE_BOOK
 
@@ -282,6 +281,11 @@ def _snapshot(game: AnarchessGame) -> Dict[str, Any]:
         "tiles": [[x, y, 1 if colour else 0] for (x, y), colour in game.tiles.items()],
         "pawns": [[x, y, owner] for (x, y), owner in game.pawns.items()],
         "current": game.current,
+        # In SOLO the person controls both tribes, but the pawn action belongs
+        # to the tribe opposite the tile just laid. Make that actor explicit
+        # so browser controls never guess from the turn owner.
+        "pawn_player": (game.acting_pawn_player() if game.placed_tile
+                        else game.current),
         "turn": game.turn_number,
         "placed": game.placed_tile,
         "last_tile": list(game.last_tile) if game.last_tile else None,
@@ -302,16 +306,25 @@ def _snapshot(game: AnarchessGame) -> Dict[str, Any]:
 def _restore(state: Any) -> AnarchessGame:
     state = _loads(state) or {}
     rules = _rules_from(state.get("rules"))
-    game = AnarchessGame(int(state.get("players", 2)), rules,
-                         names=state.get("names"))
+    # AnarchessGame normalises SOLO to its two original tribes.  Trim old
+    # snapshots too: an early browser build could save a solo game with 3–4
+    # reserves, which would distort its score when restored.
+    requested_players = int(state.get("players", 2))
+    players = 2 if rules.solo else max(2, min(4, requested_players))
+    names = state.get("names")
+    game = AnarchessGame(players, rules,
+                         names=None if names is None else list(names)[:players])
     game.tiles = {(int(x), int(y)): bool(colour)
                   for x, y, colour in state.get("tiles", [])}
     game.pawns = {(int(x), int(y)): int(owner)
-                  for x, y, owner in state.get("pawns", [])}
+                  for x, y, owner in state.get("pawns", [])
+                  if 0 <= int(owner) < game.players}
     game.supply = {True: int(state.get("supply", {}).get("light", 32)),
                    False: int(state.get("supply", {}).get("dark", 32))}
-    game.reserve = list(state.get("reserve", game.reserve))
-    game.current = int(state.get("current", 0))
+    saved_reserve = list(state.get("reserve", game.reserve))
+    game.reserve = [int(saved_reserve[i]) if i < len(saved_reserve)
+                    else game.reserve[i] for i in range(game.players)]
+    game.current = int(state.get("current", 0)) % game.players
     game.turn_number = int(state.get("turn", 1))
     game.placed_tile = bool(state.get("placed", False))
     last = state.get("last_tile")
@@ -321,7 +334,8 @@ def _restore(state: Any) -> AnarchessGame:
     game.used_pawn_action = bool(state.get("used", False))
     game.finished = bool(state.get("finished", False))
     if state.get("final"):
-        game.scores = [int(v) for v in state["final"]]
+        final = [int(v) for v in state["final"]]
+        game.scores = (final + [0] * game.players)[:game.players]
     game.drawn = state.get("drawn", None)
     return game
 
@@ -342,8 +356,9 @@ def _action_from(data: Any) -> AnarchessAction:
 
 def anarchess_new(players: int = 2, rules: Any = None,
                   seed: Optional[int] = None) -> str:
-    game = AnarchessGame(max(2, min(4, int(players))), _rules_from(rules),
-                         seed=seed)
+    parsed_rules = _rules_from(rules)
+    players = 2 if parsed_rules.solo else max(2, min(4, int(players)))
+    game = AnarchessGame(players, parsed_rules, seed=seed)
     return json.dumps(_snapshot(game))
 
 

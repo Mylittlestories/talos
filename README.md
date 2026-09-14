@@ -99,27 +99,28 @@ both — it only ever asks python-chess what is legal, so a new rule needs no
 engine changes.
 
 ### Anarchess — the land before Chess
-A reconstruction of **Anarchess** by Dimitris Grammenos (FORTH), from the
-components and the scoring rules described by its author.
+An implementation of **Anarchess** by Dimitris Grammenos (FORTH), following
+its published Quick Guide and Detailed Guide. Chess-land before the White and
+Black kingdoms, when the "pawns" were free entities.
 
-Chess-land before the White and Black kingdoms, when the "pawns" were free
-entities. Two to four players share 32 light and 32 dark tiles and grow a
-landscape:
+The standard game is two tribes sharing 32 light and 32 dark tiles; TALOS also
+offers three- and four-player local tables as an extension. A turn is simple:
 
-1. **Lay a tile** next to the land, choosing its colour (or drawing one blind,
-   if you prefer the bag).
-2. **Then, optionally, one pawn action**: settle a new pawn, step one square,
-   or attack a neighbour.
+1. **Roll and lay the tile.** The die chooses its colour; the player of the
+   opposite colour opens the game. A tile touching only one neighbour must
+   touch the opposite colour.
+2. **Then, optionally, one pawn action:** settle a pawn onto the tile just
+   laid (if its area is empty), step orthogonally, or attack diagonally.
 
-When the last tile is laid the game ends and every **area of two or more
-same-coloured tiles** scores for whoever has the most pawns in it.
-8 pawns each with two players, 6 with three, 5 with four.
+After the last tile's pawn action, each **area of two or more same-coloured
+tiles** scores for the player who holds most of its pawns. Tiles are normally
+worth 2 points, or 3 for a colour/single-pawn bonus; the largest area is taxed
+to 1 point a tile, and every pawn left in reserve costs 6.
 
-The rules that the published sources leave open are listed in the app
-(`Anarchy ▸ Anarchess`) as eight numbered reconstruction decisions, and most of
-them are switches: the bag versus the colour choice, whether an attack needs a
-supporting pawn, whether captives return, whether the last tile ends the game,
-and whether an area scores per tile or as a whole.
+**Anarchess SOLO** is a one-player 192-point challenge in which you play both
+tribes and must make the prescribed pawn action when one is available.
+**Anarcheckers** is the published jump-and-chain-capture variant. Both are
+selectable when starting an Anarchess game.
 
 ### Analysis
 * Continuous analysis with a vertical evaluation bar, MultiPV candidate
@@ -257,7 +258,8 @@ pyinstaller packaging/talos.spec --noconfirm --distpath dist
 
 ```bash
 python tools/build_web.py     # Python core, vendored python-chess, puzzles, icons
-python tools/web_smoke.mjs    # needs: npm install pyodide@0.27.7
+npm install --no-save --no-package-lock pyodide@0.27.7 jsdom
+node tools/web_smoke.mjs      # boots the real Pyodide payload
 node tools/web_dom_check.mjs  # drives the real browser UI in jsdom
 python tools/app_smoke.py     # drives the desktop application itself
 ```
@@ -292,7 +294,7 @@ Push a `v*` tag and GitHub Actions does the rest:
 Check a downloaded bundle with `sha256sum -c SHA256SUMS.txt`.
 
 ```
-lucaschess/
+talos/
 ├── run.py                 launcher
 ├── requirements.txt
 ├── data/lucas.db          imported Lucas Chess content (24 MB, ships ready)
@@ -313,7 +315,7 @@ lucaschess/
 │   ├── make_deck.py       builds the presentation
 │   ├── make_icon.py       builds the icon set in assets/
 │   ├── release_notes.py   lifts one version out of CHANGELOG.md
-│   ├── selftest.py        119 headless checks
+│   ├── selftest.py        124 headless checks
 │   └── bench.py           engine benchmark / ablation harness
 └── lc/
     ├── core/              engine, UCI driver, game model, players, clocks
@@ -353,10 +355,9 @@ lucaschess/
   `data/lucas.db` from a checkout of that repository:
   `python -m lc.data.importer ~/lucaschess`.
 * **Anarchess** is a game by **Dimitris Grammenos** (Institute of Computer
-  Science, FORTH). This is an independent reconstruction made from the
-  publicly described components and scoring rules; the eight open questions
-  are documented as reconstruction decisions inside the app rather than
-  presented as the published rules.
+  Science, FORTH). TALOS is an independent software implementation of the
+  published Anarchess Quick Guide v1.8, Detailed Guide v1.7, SOLO and
+  Anarcheckers rules; it does not bundle the original game artwork or manuals.
 * TALOS itself is released under the **GNU GPL v2 or later**, in the same
   spirit as the project that inspired it.
 * All graphics in this build are drawn procedurally at runtime (Qt vector
@@ -375,7 +376,7 @@ lucaschess/
   platform; the binary is ~110 MB, which is why it is not shipped in the
   repo. The built-in engine needs nothing extra and plays all variants,
   including the ones Stockfish cannot.
-* **Check yourself** – `python tools/selftest.py` runs 119 headless checks
+* **Check yourself** – `python tools/selftest.py` runs 124 headless checks
   over the engine, every variant, the Anarchchess rules, the Anarchess game,
   the learning model, the training modes, the database, the UCI driver and
   the Battle Chess simulation (no display required). `python

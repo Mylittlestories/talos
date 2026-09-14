@@ -1,4 +1,4 @@
-# Lucas Chess NX dependencies
+# TALOS dependencies
 PyQt6>=6.5
 python-chess>=1.10
 numpy>=1.24          # optional, speeds up statistics

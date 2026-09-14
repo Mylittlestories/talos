@@ -4,19 +4,17 @@ Anarchess view - the controller that binds rules, bot, board and panel.
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from PyQt6.QtCore import QTimer, Qt, pyqtSignal
-from PyQt6.QtGui import QColor, QFont
-from PyQt6.QtWidgets import (QCheckBox, QComboBox, QFrame, QGridLayout, QGroupBox,
-                             QHBoxLayout, QLabel, QPushButton, QScrollArea,
-                             QSizePolicy, QTextBrowser, QVBoxLayout, QWidget)
+from PyQt6.QtGui import QColor
+from PyQt6.QtWidgets import (QFrame, QGridLayout, QGroupBox,
+                             QHBoxLayout, QLabel, QPushButton, QTextBrowser, QVBoxLayout, QWidget)
 
-from .ai import LEVELS, AnarchessBot
-from .rules import (DARK, LIGHT, PAWNS_PER_PLAYER, PLAYER_COLOURS,
+from .ai import AnarchessBot
+from .rules import (DARK, LIGHT, PLAYER_COLOURS,
                     PLAYER_NAMES, RULINGS, SOLO_PERFECT_SCORE,
-                    AnarchessAction, AnarchessGame, AnarchessRules,
-                    neighbours)
+                    AnarchessAction, AnarchessGame, AnarchessRules)
 from .widget import AnarchessBoard
 
 BOT_DELAY_MS = 260
@@ -42,7 +40,7 @@ class _PlayerRow(QFrame):
         self.setObjectName("card")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setStyleSheet(
-            f"#card {{ background: #1d212c; border-radius: 8px; padding: 2px; }}")
+            "#card { background: #1d212c; border-radius: 8px; padding: 2px; }")
         lay = QHBoxLayout(self)
         lay.setContentsMargins(8, 5, 8, 5)
         self.dot = QLabel()
@@ -79,7 +77,6 @@ class AnarchessView(QWidget):
         super().__init__(parent)
         self.game = AnarchessGame(2, AnarchessRules())
         self.bots: List[Optional[AnarchessBot]] = [None, None]
-        self.human_seat = 0
         self.selected_pawn: Optional[Tuple[int, int]] = None
         self._bot_timer = QTimer(self)
         self._bot_timer.setInterval(BOT_DELAY_MS)
@@ -168,24 +165,25 @@ class AnarchessView(QWidget):
             self.start(dlg.config())
 
     def start(self, cfg: Dict) -> None:
-        players = int(cfg.get("players", 2))
         rules = cfg.get("rules") or AnarchessRules()
-        game = AnarchessGame(players, rules, seed=cfg.get("seed"))
-        game.names = list(cfg.get("names") or game.names)
+        # The model enforces this too, but normalising at the view boundary
+        # keeps its seats, names and controls aligned with the two SOLO tribes.
+        players = (2 if rules.solo else
+                   max(2, min(4, int(cfg.get("players", 2)))))
+        game = AnarchessGame(players, rules, seed=cfg.get("seed"),
+                             names=cfg.get("names"))
         self.game = game
         self.board.canvas.set_game(game)
-        self.human_seat = int(cfg.get("human", 0))
         seats: List[Optional[AnarchessBot]] = []
         kinds = cfg.get("seats") or ["human"] + ["bot"] * (players - 1)
         if rules.solo:
-            # one player plays both tribes, so no seat may go to a bot
+            # One person plays both tribes, so neither may be a bot.
             kinds = ["human"] * players
         for i in range(players):
             kind = kinds[i] if i < len(kinds) else ("human" if rules.solo
                                                     else "bot")
             if kind == "human":
                 seats.append(None)
-                self.human_seat = i
             else:
                 seats.append(AnarchessBot(i, int(cfg.get("level", 2)),
                                           seed=(cfg.get("seed") or 0) + i))
@@ -203,7 +201,7 @@ class AnarchessView(QWidget):
                 widget.deleteLater()
         self.rows: List[_PlayerRow] = []
         for i in range(self.game.players):
-            kind = " (you)" if i == self.human_seat and self.bots[i] is None else ""
+            kind = " (human)" if self.bots[i] is None else ""
             row = _PlayerRow(i, self.game.names[i] + kind)
             self.players_layout.addWidget(row)
             self.rows.append(row)
@@ -218,7 +216,11 @@ class AnarchessView(QWidget):
         self.board.canvas.set_colour(colour)
 
     def _my_turn(self) -> bool:
-        return (not self.game.finished and self.game.current == self.human_seat
+        if self.game.finished:
+            return False
+        # Every locally configured human may act on that tribe's turn.
+        # In SOLO both of the two original tribes are human seats.
+        return (self.game.current < len(self.bots)
                 and self.bots[self.game.current] is None)
 
     def _on_cell(self, x: int, y: int) -> None:
@@ -229,8 +231,9 @@ class AnarchessView(QWidget):
         if not game.placed_tile:
             colour = self.board.canvas.selected_colour
             action = AnarchessAction("tile", cell=cell, colour=colour)
-            if cell in set(game.tile_cells()) and game.supply.get(colour, 0) > 0:
-                game.apply(action)
+            legal_tiles = {a.cell for a in game.legal_tile_actions()
+                           if a.cell is not None}
+            if cell in legal_tiles and game.apply(action):
                 self.board.canvas.last_cell = cell
                 self.board.centre_on(x, y)
                 self._after_action()
@@ -251,7 +254,7 @@ class AnarchessView(QWidget):
                 self.selected_pawn = None
                 self._after_action()
             return
-        if game.pawns.get(cell) == self.human_seat:
+        if game.pawns.get(cell) == game.acting_pawn_player():
             self.selected_pawn = None if self.selected_pawn == cell else cell
             self._refresh()
             return
@@ -261,9 +264,12 @@ class AnarchessView(QWidget):
     def _skip(self) -> None:
         if not self._my_turn() or not self.game.placed_tile:
             return
+        if not any(a.kind == "pass" for a in self.game.legal_actions()):
+            self._flash("A pawn action is required when one is available.")
+            return
         self.selected_pawn = None
-        self.game.apply(AnarchessAction("pass"))
-        self._after_action()
+        if self.game.apply(AnarchessAction("pass")):
+            self._after_action()
 
     def _after_action(self) -> None:
         self._refresh()
@@ -324,7 +330,8 @@ class AnarchessView(QWidget):
         settle: List[Tuple[int, int]] = []
         if self._my_turn():
             if not game.placed_tile:
-                legal = game.tile_cells()
+                legal = [a.cell for a in game.legal_tile_actions()
+                         if a.cell is not None]
             else:
                 actions = game.legal_pawn_actions()
                 if self.selected_pawn is not None:
@@ -346,7 +353,7 @@ class AnarchessView(QWidget):
                 self.phase_label.setText("Game over")
         else:
             phase = ("1. lay a tile" if not game.placed_tile
-                     else ("2. pawn action (forced)" if game.rules.solo
+                     else ("2. pawn action (required when possible)" if game.rules.solo
                            else "2. pawn action (optional)"))
             drawn = ("light" if game.drawn else "dark") if game.drawn is not None else "?"
             self.phase_label.setText(
@@ -361,8 +368,11 @@ class AnarchessView(QWidget):
             btn.setChecked(game.drawn == colour)
         if game.drawn is not None:
             self._pick_colour(game.drawn)
-        self.skip_button.setEnabled(self._my_turn() and game.placed_tile
-                                    and not game.rules.solo)
+        can_pass = (self._my_turn() and game.placed_tile
+                    and any(a.kind == "pass" for a in game.legal_actions()))
+        self.skip_button.setEnabled(can_pass)
+        self.skip_button.setText("Pass (no pawn action)" if game.rules.solo and can_pass
+                                 else "Skip pawn action")
         scores = game.live_scores()
         for i, row in enumerate(self.rows):
             row.update(game.reserve[i], scores[i],

@@ -6,7 +6,7 @@ from typing import Dict, List, Optional
 
 from PyQt6.QtWidgets import (QCheckBox, QComboBox, QDialog, QDialogButtonBox,
                              QFormLayout, QGroupBox, QHBoxLayout, QLabel,
-                             QSpinBox, QVBoxLayout, QWidget)
+                             QSpinBox, QVBoxLayout)
 
 from .ai import LEVELS
 from .rules import PAWNS_PER_PLAYER, PLAYER_NAMES, AnarchessRules
@@ -105,16 +105,25 @@ class AnarchessDialog(QDialog):
 
     # ------------------------------------------------------------------
     def _sync(self) -> None:
+        # SOLO is one player playing the two original tribes, not a 2–4 player
+        # table with all seats marked human.  Pin the dialog to two tribes as
+        # soon as it is selected; config() repeats that guard for callers that
+        # set widgets programmatically.
+        solo = self.mode.currentData() == "solo"
+        if solo and self.players.currentData() != 2:
+            self.players.blockSignals(True)
+            self.players.setCurrentIndex(self.players.findData(2))
+            self.players.blockSignals(False)
+        self.players.setEnabled(not solo)
+        self.level.setEnabled(not solo)
+        self.seats_box.setEnabled(not solo)
+
         while self.seats_layout.count():
             item = self.seats_layout.takeAt(0)
             if item.widget() is not None:
                 item.widget().deleteLater()
         self.seat_combos = []
-        n = self.players.currentData()
-        # SOLO is one player against a target of 192 playing *both* tribes,
-        # so there is no opponent to hand a seat to.
-        solo = self.mode.currentData() == "solo"
-        self.level.setEnabled(not solo)
+        n = 2 if solo else self.players.currentData()
         for i in range(n):
             combo = QComboBox()
             combo.addItem("Human", "human")
@@ -126,17 +135,20 @@ class AnarchessDialog(QDialog):
 
     # ------------------------------------------------------------------
     def config(self) -> Dict:
-        seats = [c.currentData() for c in self.seat_combos]
-        human = seats.index("human") if "human" in seats else 0
+        solo = self.mode.currentData() == "solo"
+        players = 2 if solo else self.players.currentData()
+        seats = (["human"] * players if solo
+                 else [c.currentData() for c in self.seat_combos][:players])
+        human = 0 if solo else (seats.index("human") if "human" in seats else 0)
         return {
-            "players": self.players.currentData(),
+            "players": players,
             "seats": seats,
             "human": human,
             "level": self.level.currentIndex() + 1,
-            "names": PLAYER_NAMES[:self.players.currentData()],
+            "names": PLAYER_NAMES[:players],
             "rules": AnarchessRules(
                 tiles_per_colour=self.tile_count.currentData(),
-                solo=self.mode.currentData() == "solo",
+                solo=solo,
                 checkers=self.mode.currentData() == "checkers",
                 single_touch_opposite=self.single_touch.isChecked(),
                 protect_last_move=self.protect_last.isChecked(),

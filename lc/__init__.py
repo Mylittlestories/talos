@@ -21,7 +21,7 @@ APP_NAME = "TALOS"
 APP_TAGLINE = "The Living Chess Studio"
 
 #: Version string.
-APP_VERSION = "2.1.0"
+APP_VERSION = "2.1.1"
 
 #: Full display name, e.g. "TALOS - The Living Chess Studio".
 APP_FULL_NAME = f"{APP_NAME} - {APP_TAGLINE}"
@@ -37,8 +37,8 @@ SIDE_NAMES = {True: "White", False: "Black"}
 APP_CREDIT = (
     "Built as a modern successor to Lucas Chess (Lukas Monk, GPLv2).\n"
     "Battle Chess combat mode is a procedural homage to Battle Chess (1988,\n"
-    "Interplay).  Anarchess is a reconstruction of the abstract board game\n"
-    "designed by Dimitris Grammenos (ICS-FORTH)."
+    "Interplay).  Anarchess follows the published rules of the abstract "
+    "board game designed by Dimitris Grammenos (ICS-FORTH)."
 )
 
 

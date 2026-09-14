@@ -23,7 +23,8 @@ const DEFAULTS = {
   rules: null,           // filled from the curated Anarchchess preset on boot
   anPlayers: 2,
   anLevel: 2,
-  anBag: false,
+  anMode: "standard",
+  anTiles: "32",
 };
 
 class App {

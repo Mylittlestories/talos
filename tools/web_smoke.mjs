@@ -184,6 +184,28 @@ def _call(fn, *args):
   // the published opening is four tiles, the two light ones diagonal
   check(game.tiles.length === 4 && game.players === 2,
     "anarchess_new opens on four tiles", game.tiles.length + " tiles");
+  const solo = bridge("anarchess_new", 4, JSON.stringify({ mode: "solo" }), 12345);
+  check(solo.rules.solo && solo.players === 2 && Array.isArray(solo.reserve)
+    && solo.reserve.length === 2,
+    "SOLO always opens as two tribes", solo.players + " tribes");
+  // Old browser builds could persist a four-player SOLO table. Restoring it
+  // must trim surplus tribes, normalise its current index and leave the
+  // no-pawn exception usable through the same JSON API.
+  const oldSolo = {
+    players: 4, rules: { mode: "solo", tiles_per_colour: 16 },
+    names: ["Light", "Dark", "old third", "old fourth"],
+    tiles: [[0, 0, 1]], pawns: [], supply: { light: 7, dark: 8 },
+    reserve: [0, 0, 99, 99], current: 3, turn: 1, placed: true,
+    last_tile: [0, 0], used: false, finished: false,
+  };
+  const oldSoloLegal = bridge("anarchess_legal", JSON.stringify(oldSolo));
+  check(oldSoloLegal.can_pass && oldSoloLegal.pawns.length === 0,
+    "a stranded legacy SOLO snapshot offers its pass");
+  const oldSoloPass = bridge("anarchess_apply", JSON.stringify(oldSolo),
+    JSON.stringify({ kind: "pass" }));
+  check(oldSoloPass.ok && oldSoloPass.state.players === 2
+    && oldSoloPass.state.reserve.length === 2 && !oldSoloPass.state.placed,
+    "legacy SOLO restores as a usable two-tribe game");
   let state = game;
   let turns = 0;
   while (!state.finished && state.tiles.length < 8 && turns < 40) {
