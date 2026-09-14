@@ -159,10 +159,12 @@ def _call(fn, *args):
   const illegal = bridge("push", fen, "e2e7", "standard", null);
   check(illegal.ok === false, "illegal moves are rejected");
 
-  // the scholar's mate, found by the engine
+  // The scholar's mate, found by the engine.  Asked of Master+, not Club:
+  // the weaker levels are built to blunder on purpose (Club plays a worse
+  // move 8% of the time), so expecting mate from one is a coin toss.
   const mate = bridge("analyse",
     "r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5Q2/PPPP1PPP/RNB1K1NR w KQkq - 0 1",
-    "Club", 400, "standard", null);
+    "Master+", 1500, "standard", null);
   check(mate.mate === 1, "engine sees mate in one", JSON.stringify(mate.san));
 
   // anarchchess
