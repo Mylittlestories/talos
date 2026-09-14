@@ -459,8 +459,34 @@ def icon_names() -> List[str]:
     return sorted(_ICONS)
 
 
+def app_logo(size: int = 96) -> QPixmap:
+    """The TALOS mark from ``assets/``, scaled to the size asked for.
+
+    This is the same artwork as the application icon, so the mark in a dialog
+    or the toolbar is the one on the window and in the taskbar. Falls back to
+    :func:`splash_pixmap` when the assets are not present - a source checkout
+    that has not run ``tools/make_icon.py`` yet - so nothing shows an empty
+    gap instead.
+    """
+    import os
+    import sys
+
+    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    for name in ("assets/talos-256.png", "assets/talos-128.png",
+                 "assets/talos-64.png", "assets/talos-48.png"):
+        for base in (getattr(sys, "_MEIPASS", root), root):
+            path = os.path.join(base, name)
+            if os.path.exists(path):
+                pm = QPixmap(path)
+                if not pm.isNull():
+                    return pm.scaled(size, size,
+                                     Qt.AspectRatioMode.KeepAspectRatio,
+                                     Qt.TransformationMode.SmoothTransformation)
+    return splash_pixmap(size)
+
+
 def splash_pixmap(size: int = 256) -> QPixmap:
-    """A small brand mark used by dialogs and the about box."""
+    """A drawn stand-in for the mark, used when assets/ is not installed."""
     pm = QPixmap(size, size)
     pm.fill(Qt.GlobalColor.transparent)
     from PyQt6.QtSvg import QSvgRenderer

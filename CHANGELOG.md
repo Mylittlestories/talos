@@ -44,6 +44,15 @@ the About box.
 
 ### Added
 
+- **The app carries the mark itself.** The toolbar showed only the name in
+  text, so inside the program there was no icon anywhere: it appeared on the
+  window and in the taskbar, and nowhere in the interface. The mark now sits
+  beside the name in the toolbar, drawn from the same artwork as the
+  application icon - one ``app_logo()`` helper feeds the window, the taskbar,
+  the About box and the toolbar, so they cannot disagree. ``theme.py`` also
+  held a hand-drawn stand-in mark that nothing called and that did not look
+  like the real icon; it is now only a fallback for a checkout whose
+  ``assets/`` has not been generated yet.
 - **The repository shows the icon.** The README now leads with the mark, the
   current release badge, a live play-in-browser badge and the licence.
 

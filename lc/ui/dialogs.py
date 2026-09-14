@@ -6,13 +6,11 @@ promotion, about.
 from __future__ import annotations
 
 import os
-import sys
 from typing import Dict, List, Optional
 
 import chess
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import (QCheckBox, QComboBox, QDialog, QDialogButtonBox, QDoubleSpinBox,
                              QFileDialog, QFormLayout, QGridLayout, QGroupBox, QHBoxLayout,
                              QLabel, QLineEdit, QListWidget, QMessageBox, QPlainTextEdit,
@@ -24,6 +22,7 @@ from ..core.game import TimeControl, VARIANTS
 from ..core.players import BuiltInPlayer
 from ..core.uci import find_engines
 from .board_view import THEMES
+from .theme import app_logo
 from .pieces import STYLES
 
 
@@ -476,22 +475,6 @@ class PositionDialog(QDialog):
         return self.edit.toPlainText().strip()
 
 
-def _app_logo(size: int = 96):
-    """The TALOS mark, for dialogs. Falls back to nothing if assets are away."""
-    here = os.path.dirname(os.path.abspath(__file__))
-    root = os.path.dirname(os.path.dirname(here))
-    for name in ("assets/talos-256.png", "assets/talos-128.png",
-                 "assets/talos-64.png", "assets/talos-48.png"):
-        for base in (getattr(sys, "_MEIPASS", root), root):
-            path = os.path.join(base, name)
-            if os.path.exists(path):
-                pm = QPixmap(path)
-                if not pm.isNull():
-                    return pm.scaled(size, size, Qt.AspectRatioMode.KeepAspectRatio,
-                                     Qt.TransformationMode.SmoothTransformation)
-    return QPixmap()
-
-
 def about_dialog(parent=None) -> QMessageBox:
     """About TALOS: the mark, the version and what is actually in the box."""
     from .. import APP_NAME, APP_TAGLINE, APP_VERSION
@@ -510,7 +493,7 @@ def about_dialog(parent=None) -> QMessageBox:
 
     box = QMessageBox(parent)
     box.setWindowTitle(f"About {APP_NAME}")
-    logo = _app_logo(96)
+    logo = app_logo(96)
     if not logo.isNull():
         box.setIconPixmap(logo)
     box.setText(

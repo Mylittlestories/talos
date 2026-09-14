@@ -24,7 +24,7 @@ from PyQt6.QtWidgets import (QApplication, QDockWidget, QFileDialog, QHBoxLayout
                              QStatusBar, QTabWidget, QToolBar, QVBoxLayout, QWidget)
 
 from .. import APP_FULL_NAME, APP_NAME, APP_TAGLINE, window_title
-from .theme import PALETTE_NAMES, themed_icon
+from .theme import PALETTE_NAMES, app_logo, themed_icon
 
 from ..core.engine import DEFAULT_LEVELS, Level, level_by_name
 from ..core.game import Clock, Game, TimeControl, VARIANTS, format_clock
@@ -451,6 +451,14 @@ class MainWindow(QMainWindow):
         spacer = QWidget()
         spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         bar.addWidget(spacer)
+        # the mark in the toolbar, so the window, the taskbar and the app
+        # itself all carry the same face
+        self.brand_logo = QLabel()
+        logo = app_logo(30)
+        if not logo.isNull():
+            self.brand_logo.setPixmap(logo)
+            self.brand_logo.setContentsMargins(0, 0, 8, 0)
+            bar.addWidget(self.brand_logo)
         self.brand_label = QLabel(f"  {APP_NAME}  ")
         self.brand_label.setStyleSheet(
             "color: #f0b429; font-weight: 800; letter-spacing: 2px;")
