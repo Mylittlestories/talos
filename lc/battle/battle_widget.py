@@ -833,7 +833,8 @@ class BattleBoardWidget(QOpenGLWidget):
         else:
             self.physics.burst(mid, (1.0, 0.9, 0.6), count=22, power=1.8)
             self._sound("clash")
-        self._sound("shatter")
+        # the duel's own cue: blades ring, heavy things thud, glass shatters
+        self._sound(getattr(fight.duel, "sound", None) or "clash")
         self.shake = max(self.shake, fight.force * 0.75)
 
         # ---- and now the mess -------------------------------------------

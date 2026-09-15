@@ -537,6 +537,22 @@ def test_battle() -> None:
           len({round(w[2], 3) for w in walked}) == len(walked),
           "each gait peaks at its own height")
 
+    # A cue the bank has never heard of is silence, not an error: the sound
+    # call swallows everything, so a typo would simply never be noticed.
+    import re
+    from lc.ui.sounds import SoundBank
+    from lc.battle.gaits import all_gaits as every_gait
+    source = open(bw.__file__, encoding="utf-8").read()
+    cues = set(re.findall(r'_sound\("([a-z]+)"\)', source))
+    cues |= {g.sound for g in every_gait()}
+    cues |= {duel.sound for duel in dueltable.DUELS.values()}
+    absent = sorted(c for c in cues if c not in SoundBank.RECIPES)
+    check("every cue the battle mode plays is in the sound bank", not absent,
+          ", ".join(sorted(cues)) if not absent else "missing: " + ", ".join(absent))
+    check("the duels do not all sound the same",
+          len({duel.sound for duel in dueltable.DUELS.values()}) >= 3,
+          ", ".join(sorted({duel.sound for duel in dueltable.DUELS.values()})))
+
 
 def test_anarchy() -> None:
     section("Anarchchess (the house rules)")

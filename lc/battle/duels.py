@@ -67,8 +67,24 @@ CHOREOS = ("topple", "crumble", "shatter", "flatten", "behead", "burst",
            "dismember", "spin", "melt", "disintegrate", "impale", "crush")
 
 
+def _sound_for(style: str, choreo: str) -> str:
+    """The cue a duel plays when the blow lands.
+
+    Derived from the animation rather than listed per entry: blades ring,
+    heavy things thud, and anything that comes apart shatters.
+    """
+    if choreo in ("shatter", "dismember", "burst", "crumble", "crush"):
+        return "shatter"
+    if style in ("slash", "stab"):
+        return "sword"
+    if style in ("smash", "hammer", "club", "crush", "swing", "charge", "pounce"):
+        return "thud"
+    return "clash"
+
+
 def _d(attacker: int, victim: int, name: str, line: str, style: str,
        choreo: str, **kw) -> Tuple[Tuple[int, int], "Duel"]:
+    kw.setdefault("sound", _sound_for(style, choreo))
     return (attacker, victim), Duel(
         key=f"{PIECE_LETTER[attacker]}x{PIECE_LETTER[victim]}",
         name=name, line=line, style=style, choreo=choreo, **kw)
