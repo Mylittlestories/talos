@@ -553,6 +553,50 @@ def test_battle() -> None:
           len({duel.sound for duel in dueltable.DUELS.values()}) >= 3,
           ", ".join(sorted({duel.sound for duel in dueltable.DUELS.values()})))
 
+    # ---- and between moves the board is not frozen ----
+    from lc.battle.gaits import IDLES, idle_motion
+    check("every piece has something to do while it waits", len(IDLES) == 6,
+          ", ".join(f"{chess.piece_name(k)}" for k in sorted(IDLES)))
+    board = chess.Board()
+    widget.sync_position(board)
+    standing = [widget._idle(p) for p in widget.pieces.values()]
+    check("pieces are not frozen between moves",
+          any(abs(m[0]) > 1e-6 for m in standing),
+          f"{sum(1 for m in standing if abs(m[0]) > 1e-6)} of {len(standing)} "
+          "shifting their weight")
+    check("but only by a hair",
+          all(abs(m[0]) < 0.02
+              and max(abs(m[1]), abs(m[2]), abs(m[3])) < 0.1 for m in standing))
+    amplitudes = {kind: max(abs(idle_motion(kind, t / 7.0)[0])
+                            for t in range(24)) for kind in IDLES}
+    check("each rank waits in its own way",
+          len({round(v, 5) for v in amplitudes.values()}) >= 5,
+          f"knight {amplitudes[chess.KNIGHT]:.3f} against rook "
+          f"{amplitudes[chess.ROOK]:.3f}")
+
+    # a piece mid-move must not idle on top of its walk
+    walker = widget.pieces[chess.E2]
+    quiet = _Rec()
+    quiet.move = chess.Move(chess.E2, chess.E4)
+    quiet.fen_before = board.fen()
+    quiet.capture, quiet.captured_square = None, None
+    quiet.is_en_passant = quiet.is_castle = quiet.is_promotion = False
+    board.push(quiet.move)
+    quiet.fen_after = board.fen()
+    widget.play_move(quiet)
+    check("a piece mid-move does not idle as well",
+          widget._idle(walker) == (0.0, 0.0, 0.0, 0.0),
+          "idle suspended while it is walking")
+    while widget.walks:
+        widget._tick()
+    drift = []
+    for _ in range(12):
+        widget.time += 0.13
+        drift.append(widget._idle(walker)[0])
+    check("and breathes again once it arrives",
+          max(drift) - min(drift) > 1e-4,
+          f"{max(drift) - min(drift):.4f} of drift over a second and a half")
+
 
 def test_anarchy() -> None:
     section("Anarchchess (the house rules)")

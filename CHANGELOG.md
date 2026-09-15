@@ -164,6 +164,12 @@ Anarchess stopped being a reconstruction, and Battle Chess learned to walk.
   anything that comes apart shatters. Two of the cues Battle Chess asked for
   were never in the sound bank at all; a missing cue is silence rather than an
   error, so it had gone unnoticed, and the suite checks the names now.
+- **The board is not frozen between moves.** Each piece shifts its weight
+  while it waits: the knight paws the ground, the bishop sways, the queen looks
+  about, the king fidgets, and the rook does very nearly nothing at all. The
+  offsets are a hair's breadth, they are suspended the moment a piece starts to
+  move, and no two pieces breathe in time with each other. Preferences can turn
+  it off.
 - `python tools/app_smoke.py` builds the real window and plays Anarchess in
   all three of its modes. Twenty checks on the wiring rather than the parts.
 

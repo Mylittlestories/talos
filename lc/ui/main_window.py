@@ -108,6 +108,7 @@ class MainWindow(QMainWindow):
             "auto_queen": True, "auto_save": True, "show_eval": True,
             "battle_captures": True, "battle_animation": "Full stage",
             "battle_quality": "High", "battle_camera": "Cinematic",
+            "battle_idle": True,
             "battle_gore": "Classic", "ui_theme": "midnight",
             "analysis_depth_ms": 1200, "multipv": 3,
             "engines": [], "last_white": {}, "last_black": {},

@@ -279,6 +279,9 @@ def main() -> int:
     prefs = PreferencesDialog()
     check("preferences open", prefs.duels_button is not None,
           prefs.duels_button.text())
+    check("the battle switches are all there",
+          prefs.battle_idle is not None and prefs.battle_animation is not None,
+          "idle, animation")
     duels = DuelsDialog()
     tables = duels.findChildren(QTreeWidget)
     check("the walks and the duels are listed",

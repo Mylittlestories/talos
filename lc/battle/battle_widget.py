@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import math
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
 import chess
@@ -112,6 +112,8 @@ class Piece3D:
     alive: bool = True
     fade: float = 1.0
     wobble: float = 0.0
+    #: so the board does not breathe in unison - see lc/battle/gaits.py
+    idle_phase: float = field(default_factory=lambda: random.random() * math.tau)
 
 
 @dataclass
@@ -1175,6 +1177,22 @@ class BattleBoardWidget(QOpenGLWidget):
         for walk in self.walks:
             self._draw_piece(walk.piece_ref)
 
+    def _is_busy(self, piece: Piece3D) -> bool:
+        """Is this piece mid-animation? Idling over a walk looks like a fit."""
+        for walk in self.walks:
+            if walk.piece_ref is piece:
+                return True
+        for fight in self.fights:
+            if fight.attacker is piece or fight.victim_ref is piece:
+                return True
+        return False
+
+    def _idle(self, piece: Piece3D) -> Tuple[float, float, float, float]:
+        """(dy, dyaw, dpitch, droll) for a piece standing still."""
+        if not self.settings.get("battle_idle", True) or self._is_busy(piece):
+            return 0.0, 0.0, 0.0, 0.0
+        return gaittable.idle_motion(piece.piece, self.time, piece.idle_phase)
+
     def _draw_piece(self, piece: Piece3D) -> None:
         name = PIECE_NAMES.get(piece.piece.piece_type)
         lst = self._lists.get(f"piece_{name}")
@@ -1183,16 +1201,17 @@ class BattleBoardWidget(QOpenGLWidget):
         white = piece.piece.color == chess.WHITE
         self._material(WHITE_COLOR if white else BLACK_COLOR,
                        WHITE_ACCENT if white else BLACK_ACCENT)
+        dy, d_yaw, d_pitch, d_roll = self._idle(piece)
         GL.glPushMatrix()
-        GL.glTranslatef(piece.x, piece.y, piece.z)
+        GL.glTranslatef(piece.x, piece.y + dy, piece.z)
         if piece.piece.color == chess.BLACK:
             GL.glRotatef(180.0, 0.0, 1.0, 0.0)
-        if piece.yaw:
-            GL.glRotatef(math.degrees(piece.yaw), 0.0, 1.0, 0.0)
-        if piece.pitch:
-            GL.glRotatef(math.degrees(piece.pitch), 1.0, 0.0, 0.0)
-        if piece.roll:
-            GL.glRotatef(math.degrees(piece.roll), 0.0, 0.0, 1.0)
+        if piece.yaw or d_yaw:
+            GL.glRotatef(math.degrees(piece.yaw + d_yaw), 0.0, 1.0, 0.0)
+        if piece.pitch or d_pitch:
+            GL.glRotatef(math.degrees(piece.pitch + d_pitch), 1.0, 0.0, 0.0)
+        if piece.roll or d_roll:
+            GL.glRotatef(math.degrees(piece.roll + d_roll), 0.0, 0.0, 1.0)
         scale = piece.scale * (0.92 if piece.piece.piece_type == chess.PAWN else 1.0)
         GL.glScalef(scale, scale * piece.sy, scale)
         glCallList(lst)

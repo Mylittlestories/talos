@@ -17,12 +17,14 @@ the whole mode still fits in a few hundred lines and needs no assets.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
 import chess
 
-__all__ = ["Gait", "GAITS", "gait_for", "all_gaits", "move_duration"]
+__all__ = ["Gait", "GAITS", "gait_for", "all_gaits", "move_duration",
+           "Idle", "IDLES", "idle_motion"]
 
 
 @dataclass(frozen=True)
@@ -91,6 +93,56 @@ GAITS: Dict[int, Gait] = {
 
 #: used when a piece has no gait of its own (variants, promoted pieces)
 DEFAULT_GAIT = GAITS[P]
+
+
+# --------------------------------------------------------------------------
+# standing still
+# --------------------------------------------------------------------------
+# Between moves the board should not be frozen: the original's pieces shift
+# their weight, paw the ground and look about. These are the amplitudes of
+# that, in board squares and radians - deliberately small, so it reads as
+# breathing rather than fidgeting.
+
+@dataclass(frozen=True)
+class Idle:
+    """How a piece occupies itself when nothing is happening to it."""
+
+    bob: float = 0.006        # vertical drift, board squares
+    roll: float = 0.0         # side to side, radians
+    pitch: float = 0.0        # fore and aft, radians
+    yaw: float = 0.0          # looking about, radians
+    period: float = 3.4       # seconds for one breath
+
+
+IDLES: Dict[int, Idle] = {
+    P: Idle(bob=0.006, roll=0.022, period=3.1),                # shifts weight
+    N: Idle(bob=0.013, pitch=0.028, period=1.9),               # restless, paws
+    B: Idle(bob=0.004, roll=0.014, period=4.2),                # sways slowly
+    R: Idle(bob=0.002, roll=0.004, period=5.5),                # stone: barely
+    Q: Idle(bob=0.008, yaw=0.055, period=3.8),                 # looks about
+    K: Idle(bob=0.010, yaw=0.038, roll=0.012, period=2.6),     # fidgets
+}
+
+DEFAULT_IDLE = Idle()
+
+
+def idle_motion(piece, t: float, phase: float = 0.0
+                ) -> Tuple[float, float, float, float]:
+    """(dy, dyaw, dpitch, droll) for a piece standing still at time *t*.
+
+    *phase* is per piece, so the board does not breathe in unison. A second,
+    slower harmonic is mixed in at a different rate: a single sine at one
+    shared period reads as a metronome.
+    """
+    kind = piece.piece_type if isinstance(piece, chess.Piece) else int(piece)
+    idle = IDLES.get(kind, DEFAULT_IDLE)
+    w = 2.0 * math.pi / max(0.5, idle.period)
+    swing = math.sin(w * t + phase)
+    drift = math.sin(w * 0.43 * t + phase * 1.7)
+    return (idle.bob * (0.7 * swing + 0.3 * drift),
+            idle.yaw * drift,
+            idle.pitch * swing,
+            idle.roll * swing)
 
 
 def gait_for(piece) -> Gait:

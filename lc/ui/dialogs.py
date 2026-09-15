@@ -341,6 +341,8 @@ class PreferencesDialog(QDialog):
         self.battle_quality = QComboBox()
         self.battle_quality.addItems(["Low", "Medium", "High", "Ultra"])
         self.battle_quality.setCurrentText(s.get("battle_quality", "High"))
+        self.battle_idle = QCheckBox("Pieces shift their weight when idle")
+        self.battle_idle.setChecked(bool(s.get("battle_idle", True)))
         self.battle_camera = QComboBox()
         self.battle_camera.addItems(["Classic", "Cinematic", "Top-down"])
         self.battle_camera.setCurrentText(s.get("battle_camera", "Cinematic"))
@@ -362,6 +364,7 @@ class PreferencesDialog(QDialog):
         form.addRow("Battle animation", self.battle_animation)
         form.addRow("Battle quality", self.battle_quality)
         form.addRow("Battle camera", self.battle_camera)
+        form.addRow("", self.battle_idle)
         form.addRow("", self.duels_button)
         layout.addLayout(form)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok |
@@ -391,6 +394,7 @@ class PreferencesDialog(QDialog):
             in ("Full stage", "Combat only"),
             "battle_quality": self.battle_quality.currentText(),
             "battle_camera": self.battle_camera.currentText(),
+            "battle_idle": self.battle_idle.isChecked(),
         }
 
 
