@@ -16,6 +16,53 @@ Nothing yet.
 
 ---
 
+## [2.2.2] — The parts nobody had run
+
+Three files in the application — the importer that builds the Lucas database,
+the learning coach and the anarchic rulebook — had never been executed by a
+single check. Some seven hundred and fifty statements of real code, all of it
+shipped, none of it ever run. This release runs them: the rulebook ends at 99%
+covered, the coach at 76% and the importer at 31%. Across the whole
+application, coverage rises from 64% to 68%, and the suite from 323 checks to
+355. The one file still untouched is the Stockfish installer, which is a
+download and cannot be exercised offline.
+
+### Added
+
+- **The importer is tested end to end.** A synthetic Lucas folder is written —
+  a back-rank mate, a check that is not a mate, a verbatim duplicate and a line
+  whose FEN is not a FEN — and imported into a scratch database, and the result
+  is read back out: three puzzles, the duplicate dropped, the junk line
+  skipped, the star rating carried into the difficulty column, the `Config.ini`
+  beside the file kept with its set. A file with nothing usable in it leaves no
+  empty set behind to clutter the browser.
+- **Its helpers are pinned down too.** Reading a solution line means skipping
+  move numbers, comments, variations, annotation glyphs and result tokens, so
+  `1. e4 e5 2. Nf3 {c} (1. d4 d5) $1 1-0` comes out as three UCI moves with
+  their SAN beside them. An illegal solution quietly converts to nothing
+  instead of raising, which is the behaviour the importer depends on to skip
+  the puzzles it cannot read.
+- **The learning coach is driven through its widgets.** It opens on a model
+  with fifteen reviews behind it, draws one mastery bar per theme, refreshes
+  after a session, fires both of its buttons back into the application, and
+  forgets every review interval when it is asked to reset.
+- **So is the anarchic rulebook.** It opens with a switch for every rule,
+  counts them as they are toggled, tells full anarchy apart from the curated
+  rulebook the community actually plays, and writes the switches back into the
+  active rules when it is accepted.
+
+### Fixed
+
+- No defect in the application came out of it, which is the finding: the
+  importer, the coach and the rulebook were each run for the first time and
+  behaved. What needed correcting were three of my own tests that assumed too
+  much — one trusted the order the filesystem hands back folders, one expected
+  mastery to be a fraction when the model, the bars and the labels all call it
+  a percentage, and one called a move a bare check when in that position the
+  king had no flight square and it was mate all along.
+
+---
+
 ## [2.2.1] — The board between moves
 
 What Battle Chess does when you are not moving anything, which is most of the

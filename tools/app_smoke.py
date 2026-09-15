@@ -290,6 +290,94 @@ def main() -> int:
           f"{tables[0].topLevelItemCount()} walks, "
           f"{tables[1].topLevelItemCount()} duels")
 
+    # ------------------------------------------------------------------
+    section("the anarchy rulebook")
+    from PyQt6.QtWidgets import QMessageBox, QTextBrowser
+    from lc.ui.anarchy_dialog import (ACTIVE, AnarchyRulesBrowser,
+                                      AnarchyRulesDialog)
+
+    rulebook = AnarchyRulesDialog(preset="anarchchess")
+    keys = list(rulebook.boxes)
+    check("the rulebook opens with a switch per rule",
+          len(keys) >= 6, f"{len(keys)} switches")
+    rulebook._apply_preset("anarchy")
+    wild = sum(1 for b in rulebook.boxes.values() if b.isChecked())
+    rulebook._apply_preset("curated")
+    curated = sum(1 for b in rulebook.boxes.values() if b.isChecked())
+    check("full anarchy switches on more than the curated rulebook",
+          wild > curated, f"{wild} against {curated}")
+    check("the counter under the switches follows them",
+          f"{curated} of" in rulebook.count_label.text(),
+          rulebook.count_label.text())
+    preset = rulebook.preset_combo.currentData()
+    for box in rulebook.boxes.values():
+        box.setChecked(True)
+    rulebook._accept()
+    saved = ACTIVE.get(preset)
+    check("accepting writes the switches back into the rules",
+          saved is not None
+          and all(getattr(saved, key, False) for key in keys),
+          f"{sum(1 for k in keys if getattr(saved, k, False))} of {len(keys)}")
+
+    browser = AnarchyRulesBrowser()
+    doc = browser.findChild(QTextBrowser)
+    text = doc.toPlainText() if doc is not None else ""
+    check("the rules browser explains the house rules",
+          "Anarchchess" in text and "Il Vaticano" in text,
+          f"{len(text.split())} words")
+
+    # ------------------------------------------------------------------
+    section("the learning coach")
+    import sqlite3
+
+    from lc.training.learning import SKILLS, Learner
+    from lc.ui.learning_dialog import LearningDialog
+
+    conn = sqlite3.connect(":memory:")
+    learner = Learner(conn)
+    for i in range(15):
+        learner.record(7, 100 + i, solved=(i % 3 != 0), seconds=4.0,
+                       skill="tactics")
+    coach = LearningDialog(learner)
+    check("the coach opens on its own progress model",
+          coach.windowTitle() == "Learning coach")
+    check("every theme gets a mastery bar",
+          len(coach.bars) == len(SKILLS), f"{len(coach.bars)} bars")
+    check("the headline figures are filled in",
+          all(card.value.text() for card in coach.stat_cards.values()))
+    check("the coach has something to say", len(coach.advice.text()) > 20,
+          coach.advice.text()[:48])
+    coach.refresh()
+    # Mastery is a percentage: the bar is drawn as value/100 and the model
+    # clamps it to 0..100 at the source.
+    check("refreshing after a session keeps the bars inside 0..100",
+          all(0.0 <= bar.value <= 100.0 for bar in coach.bars.values()),
+          f"{min(b.value for b in coach.bars.values()):.0f}-"
+          f"{max(b.value for b in coach.bars.values()):.0f}%")
+
+    fired: List[str] = []
+    buttons = LearningDialog(learner,
+                             on_review=lambda: fired.append("review"),
+                             on_weakest=lambda: fired.append("weakest"))
+    buttons._review()
+    buttons._weakest()
+    check("the two buttons call back into the application",
+          fired == ["review", "weakest"], " ".join(fired) or "nothing fired")
+
+    # Resetting asks first; answering yes forgets every review interval.
+    asked = QMessageBox.question
+    QMessageBox.question = staticmethod(
+        lambda *a, **k: QMessageBox.StandardButton.Yes)
+    try:
+        before = len(learner.cards)
+        LearningDialog(learner)._reset()
+        check("resetting forgets the review intervals",
+              before > 0 and len(learner.cards) == 0,
+              f"{before} cards before, {len(learner.cards)} after")
+    finally:
+        QMessageBox.question = asked
+    conn.close()
+
     print(f"\n{PASSED} passed, {len(FAILED)} failed")
     if FAILED:
         print("failing: " + ", ".join(FAILED))

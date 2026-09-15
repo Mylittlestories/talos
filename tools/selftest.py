@@ -1014,6 +1014,124 @@ def test_learning() -> None:
           learner.skills["mates"].seen == 0)
 
 
+MATE_FEN = "6k1/5ppp/8/8/8/8/5PPP/R5K1 w - - 0 1"    # Ra8 is mate
+CHECK_FEN = "6k1/5pp1/8/8/8/8/5PPP/R5K1 w - - 0 1"   # the king escapes to h7
+END_FEN = "8/8/8/8/8/5k2/8/5K2 w - - 0 1"
+
+# A back-rank mate, a check that is not a mate, a verbatim duplicate of that
+# check, and a line whose FEN is not a FEN at all.
+TACTICS_LINES = [
+    f"{MATE_FEN}|Difficulty ***|1. Ra8#|1. Ra8# 1-0",
+    f"{CHECK_FEN}|Difficulty *|1. Ra8+|1. Ra8+",
+    f"{CHECK_FEN}|Difficulty *|1. Ra8+|1. Ra8+",
+    "not a fen at all|Difficulty **|1. e4|",
+    "",
+]
+
+
+def test_importer() -> None:
+    """The build-time importer that turns raw Lucas files into lucas.db."""
+    import sqlite3
+
+    from lc.data.importer import (SCHEMA, MAX_PGN, clip, clean_text,
+                                  difficulty_from_label, guess_kind,
+                                  import_fns_folder, sample_even, san_to_uci,
+                                  valid_fen)
+
+    section("the importer")
+
+    check("clip keeps short text and marks long text",
+          clip(None, 5) == "" and clip("  hi  ", 10) == "hi"
+          and clip("abcdefgh", 4) == "abc\u2026")
+    check("sample_even spreads its picks across the whole file",
+          sample_even(list("abcde"), 0) == list("abcde")
+          and sample_even(list("abcde"), 9) == list("abcde")
+          and sample_even(list("abcde"), 3) == ["a", "b", "d"])
+    check("clean_text strips markup and NAGs",
+          clean_text("a<br>b <b>c</b> $1 d") == "a\nb c  d")
+    check("san_to_uci reads numbers, comments and variations",
+          san_to_uci(chess.STARTING_FEN, "1. e4 e5 2. Nf3 {c} (1. d4 d5) $1 1-0")
+          == ("e2e4 e7e5 g1f3", "e4 e5 Nf3"))
+    check("san_to_uci names a mate",
+          san_to_uci(MATE_FEN, "1. Ra8#") == ("a1a8", "Ra8#"))
+    check("an illegal solution converts to nothing, rather than raising",
+          san_to_uci(MATE_FEN, "1. Qh5#") == ("", ""))
+    check("valid_fen accepts a position and rejects junk",
+          valid_fen(MATE_FEN) and not valid_fen("junk")
+          and not valid_fen("8/8/8/8/8/8/8/8 w - - 0 1"))
+    check("difficulty comes from the stars and is capped at five",
+          difficulty_from_label("Difficulty *") == 1
+          and difficulty_from_label("Difficulty ***") == 3
+          and difficulty_from_label("Difficulty ******") == 5
+          and difficulty_from_label("Find the win") == 0)
+    check("guess_kind sorts a folder by its name",
+          guess_kind("Mate in 2", "") == "mates"
+          and guess_kind("Openings", "") == "openings"
+          and guess_kind("Random", "x") == "tactics")
+
+    with tempfile.TemporaryDirectory() as root:
+        tactics = os.path.join(root, "Tactics")
+        endings = os.path.join(root, "Endgames")
+        os.makedirs(tactics)
+        os.makedirs(endings)
+        with open(os.path.join(tactics, "Config.ini"), "w") as fh:
+            fh.write("[CONFIG]\nlevel=3\n")
+        with open(os.path.join(tactics, "mate in two.fns"), "w") as fh:
+            fh.write("\n".join(TACTICS_LINES))
+        # A file with nothing usable in it. The set it opens must not linger.
+        with open(os.path.join(tactics, "broken.fns"), "w") as fh:
+            fh.write("no fen here|label|1. e4\n")
+        with open(os.path.join(endings, "technique.fns"), "w") as fh:
+            fh.write(f"{END_FEN}|Difficulty **|1. Ke1|\n")
+
+        conn = sqlite3.connect(":memory:")
+        conn.executescript(SCHEMA)
+        total = import_fns_folder(conn, root, "selftest")
+
+        check("three usable lines, one duplicate and one junk line dropped",
+              total == 3, f"imported {total}")
+        check("a file with nothing usable leaves no empty set behind",
+              conn.execute("SELECT COUNT(*) FROM sets").fetchone()[0] == 2)
+        kinds = sorted(row[0] for row in
+                       conn.execute("SELECT DISTINCT kind FROM sets"))
+        check("folders are filed under the right kind",
+              kinds == ["endgames", "tactics"], " ".join(kinds))
+
+        # os.walk visits the folders in filesystem order, so ask for the
+        # tactics rows explicitly instead of trusting insertion order.
+        rows = conn.execute(
+            "SELECT p.solution, p.solution_san, p.difficulty, p.pgn, p.category"
+            " FROM puzzles p JOIN sets s ON s.id = p.set_id"
+            " WHERE s.kind = 'tactics' ORDER BY p.ord").fetchall()
+        end_rows = conn.execute(
+            "SELECT p.solution, p.solution_san, p.difficulty"
+            " FROM puzzles p JOIN sets s ON s.id = p.set_id"
+            " WHERE s.kind = 'endgames'").fetchall()
+        check("an endgame folder imports as an endgame",
+              end_rows == [("f1e1", "Ke1", 2)], str(end_rows))
+        check("the mate is stored as UCI with its SAN beside it",
+              rows[0][0] == "a1a8" and rows[0][1] == "Ra8#",
+              f"{rows[0][0]} / {rows[0][1]}")
+        check("the bare check keeps its own difficulty",
+              rows[1][0] == "a1a8" and rows[1][1] == "Ra8+"
+              and rows[1][2] == 1, f"{rows[1][1]} difficulty {rows[1][2]}")
+        check("the star rating carries into the database", rows[0][2] == 3)
+        check("the PGN tail is kept", rows[0][3] == "1. Ra8# 1-0")
+        check("the file name becomes the category",
+              "mate in two" in rows[0][4], rows[0][4])
+        check("a Config.ini beside the file is carried into the set",
+              "level=3" in (conn.execute(
+                  "SELECT config FROM sets WHERE kind='tactics'")
+                  .fetchone()[0] or ""))
+
+        # A long PGN tail is clipped rather than stored whole.
+        long_pgn = "x" * (MAX_PGN + 500)
+        clipped = clip(long_pgn, MAX_PGN)
+        check("a long PGN tail is clipped, not stored whole",
+              len(clipped) == MAX_PGN and clipped.endswith("\u2026"))
+        conn.close()
+
+
 def main() -> int:
     print("TALOS – self test")
     start = time.time()
@@ -1022,6 +1140,7 @@ def main() -> int:
         test_variants()
         test_game_model()
         test_paths()
+        test_importer()
         window = test_interface()
         test_training(window)
         test_database(window)
