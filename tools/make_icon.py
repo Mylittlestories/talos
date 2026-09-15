@@ -54,6 +54,7 @@ SHADOW = (0, 0, 0, 120)
 SIZES = (1024, 512, 256, 192, 180, 128, 96, 64, 48, 32, 16)
 GRID = 11                 # tiles across the knight
 SUPERSAMPLE = 4
+BOLD = 0.040              # how much heavier the mark is drawn than the glyph
 
 
 # --------------------------------------------------------------------------
@@ -80,6 +81,14 @@ def knight_mask(size: int) -> Image.Image:
     side = max(w, h)
     square = Image.new("L", (side, side), 0)
     square.paste(image, ((side - w) // 2, (side - h) // 2))
+    # The stock chess knight in a text font is drawn thin: at 16 px it all but
+    # disappears next to the plate. Grow it, then blur and re-threshold so the
+    # extra weight reads as a heavier cut of the same shape rather than as a
+    # blocky outline, and so the ear and the muzzle survive the growth.
+    grow = max(1, int(size * BOLD))
+    square = square.filter(ImageFilter.MaxFilter(grow * 2 + 1))
+    square = square.filter(ImageFilter.GaussianBlur(size * 0.009))
+    square = square.point(lambda v: 255 if v > 118 else 0)
     return square.resize((size, size), Image.LANCZOS)
 
 
@@ -95,7 +104,19 @@ def knight_body(mask: Image.Image, size: int, cells: int = GRID) -> Image.Image:
     is room for it.
     """
     out = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    out.paste(AMBER, (0, 0), mask)
+    # Lit from above: the mark gets a vertical gradient instead of one flat
+    # amber, so it reads as a solid object rather than a sticker.
+    if size >= 48:
+        grad = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+        draw_grad = ImageDraw.Draw(grad)
+        for y in range(size):
+            t = y / max(1, size - 1)
+            colour = tuple(int(AMBER_LIGHT[i] + (AMBER[i] - AMBER_LIGHT[i]) * t)
+                           for i in range(3))
+            draw_grad.line([(0, y), (size, y)], fill=colour + (255,))
+        out.paste(grad, (0, 0), mask)
+    else:
+        out.paste(AMBER, (0, 0), mask)
     if size >= 96:                       # below this the tiles are noise
         step = size / cells
         draw = ImageDraw.Draw(out)
@@ -134,7 +155,7 @@ def board_strip(size: int, plate: Image.Image) -> Image.Image:
             light = (row + col) % 2 == 0
             draw.rectangle([col * col_w, top + row * row_h,
                             (col + 1) * col_w, top + (row + 1) * row_h],
-                           fill=(PARCHMENT if light else WALNUT)[:3] + (52,))
+                           fill=(PARCHMENT if light else WALNUT)[:3] + (74,))
     strip.putalpha(ImageChops.darker(strip.split()[-1], plate))
     return strip
 
@@ -144,7 +165,7 @@ def amber_glow(tiles: Image.Image, blur: float) -> Image.Image:
     alpha = tiles.split()[-1]
     grown = alpha.filter(ImageFilter.MaxFilter(5))
     glow = Image.new("RGBA", tiles.size, AMBER)
-    glow.putalpha(grown.point(lambda v: int(v * 0.55)))
+    glow.putalpha(grown.point(lambda v: int(v * 0.72)))
     return glow.filter(ImageFilter.GaussianBlur(blur))
 
 
@@ -196,7 +217,7 @@ def compose(size: int, maskable: bool = False) -> Image.Image:
     mask_img = knight_mask(knight)
     tiles = knight_body(mask_img, knight)
     tiles = tiles.crop(tiles.getbbox())
-    scale = (inner * (0.74 if maskable else 0.72)) / max(tiles.size)
+    scale = (inner * (0.80 if maskable else 0.78)) / max(tiles.size)
     tiles = tiles.resize((max(1, int(tiles.width * scale)),
                           max(1, int(tiles.height * scale))), Image.LANCZOS)
     blur = max(1.0, tiles.width * 0.035)

@@ -12,7 +12,25 @@ release workflow lifts the section for the tag out of this file.
 
 ## [Unreleased]
 
-Nothing yet.
+### Fixed
+
+- **The browser board could grow past the bottom of the window.** Its width
+  was capped with `calc(100dvh - 190px)`. A browser that has never heard of
+  `dvh` — an older WebView, typically — throws that whole declaration away,
+  and the board fell back to the full width of the page; being a square, it
+  then ran off the bottom and was cut off. The cap is now written with `vh`
+  first, and `dvh` is layered on only where the browser understands it, so the
+  board stays square and on screen either way. Measured at seven viewports,
+  with and without `dvh`: square and fitting every time.
+
+### Changed
+
+- **The mark is heavier.** The knight was cut from a thin font glyph and
+  tended to read as a scatter of tiles once it got small. It is now drawn a
+  third heavier — a third more ink on the plate — lit from above with a
+  vertical gradient instead of one flat amber, given a stronger halo, and set
+  larger on the plate, at 78% of it rather than 72%. The land tiles it is
+  built from, and the board along its foot, are the same idea turned up.
 
 ---
 
