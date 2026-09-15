@@ -16,6 +16,36 @@ Nothing yet.
 
 ---
 
+## [2.2.1] — The board between moves
+
+What Battle Chess does when you are not moving anything, which is most of the
+time you spend looking at it.
+
+### Added
+
+- **The board is not frozen between moves.** Each rank waits in its own way:
+  the knight paws the ground, the bishop sways, the queen looks about, the king
+  fidgets, the pawn shifts his weight, and the rook — being stone — does very
+  nearly nothing at all, two thousandths of a square against the knight's
+  thirteen. Two sines at different rates are mixed so it never reads as a
+  metronome, and every piece carries its own phase, so the board never breathes
+  in unison. The offsets are suspended the moment a piece starts to move,
+  because idling on top of a walk looks like a fit, and they resume on arrival.
+  Preferences can switch the whole thing off.
+- **Every duel sounds like itself.** Each of the thirty animations now names the
+  cue it plays, derived from what it is: blades ring, heavy things thud, and
+  whatever comes apart shatters. The impact plays that cue instead of one clash
+  for every capture in the game.
+
+### Fixed
+
+- **A cue the sound bank has never heard of was silent, not an error.** The
+  sound call swallows everything, so a missing cue was the kind of failure no
+  log ever mentions. The suite checks that every cue Battle Chess plays exists
+  in the bank, which is how the two that were missing came to light.
+
+---
+
 ## [2.2.0] — Three lands, sharper play
 
 ### Added
